@@ -13,6 +13,17 @@ import direct.directbase.DirectStart
 
 from direct.showbase.DirectObject import DirectObject
 from direct.showbase.InputStateGlobal import inputState
+from direct.gui.OnscreenText import OnscreenText,TextNode
+from direct.gui.OnscreenImage import OnscreenImage
+from direct.gui.DirectGui import DGG, DirectButton, DirectFrame
+from direct.interval.LerpInterval import LerpFunc
+from direct.interval.IntervalGlobal import Sequence, Parallel, Func, Wait
+from direct.interval.LerpInterval import *
+from direct.interval.ActorInterval import ActorInterval, LerpAnimInterval
+import logging
+
+import simplepbr
+import gltf
 
 from panda3d.core import *
 from direct.gui.OnscreenText import OnscreenText
@@ -40,7 +51,7 @@ class Game(DirectObject):
     render.clearLight()
     render.setLight(alightNP)
     render.setLight(dlightNP)
-
+    self.setup()
     # Input
     self.accept('escape', self.doExit)
     self.accept('r', self.doReset)
@@ -48,7 +59,7 @@ class Game(DirectObject):
     self.accept('f2', self.toggleTexture)
     self.accept('f3', self.toggleDebug)
     self.accept('f5', self.doScreenshot)
-    self.accept('t', self.doJump)
+    self.accept('t', self.doSwipe,extraArgs = [self.scanPoints[0]])
 
     inputState.watchWithModifiers('forward', 'w')
     inputState.watchWithModifiers('left', 'a')
@@ -59,11 +70,27 @@ class Game(DirectObject):
 
     # Task
     taskMgr.add(self.update, 'updateWorld')
-
+    self.swiping = False
     # Physics
-    self.setup()
+    
     self.camPos = self.camTarg.getPos(render)
+  def doSwipe(self, swipepoint, entry):
+      #puts
+      self.swiping = True
+      self.boxNP.node().setLinearVelocity((0,0,0))
+      # h = 
+      # p = LerpPosHprInterval(self.playerM, .01, )
+      p = LerpPosInterval(self.boxNP, .2,(0,3,1), other=swipepoint )
+      a = self.playerM.actorInterval( 'swipe',0,startFrame = 0, endFrame = 40)
+      self.credit+=1
+      
+      def end():
+          self.swiping = False
+      f = Func(end)
+      seq = Sequence(p,a,f).start()
+
   # _____HANDLER_____
+
 
   def doExit(self):
     self.cleanup()
@@ -90,7 +117,7 @@ class Game(DirectObject):
 
   # ____TASK___
 
-  def processInput(self, dt):
+  def processInput(self, dt, fo):
     force = Vec3(0, 0, 0)
     torque = Vec3(0, 0, 0)
 
@@ -101,8 +128,8 @@ class Game(DirectObject):
     if inputState.isSet('turnLeft'):  torque.setZ( .5)
     if inputState.isSet('turnRight'): torque.setZ(-.5)
     
-
-    force *= 10.0
+    #force increases with credit score
+    force *= fo
     torque *= 2.0
 
     force = render.getRelativeVector(self.playerM, force)
@@ -118,14 +145,16 @@ class Game(DirectObject):
   def update(self, task):
     dt = globalClock.getDt()
 
-    self.processInput(dt)
+    f = self.credit * 2
+    if self.swiping==False:
+      self.processInput(dt, f)
     #self.world.doPhysics(dt)
     # self.boxNP.setP(0)
     # self.boxNP.setR(0)
     self.world.doPhysics(dt, 5, 1.0/180.0)
 
     self.camdelay(2)
-    self.timer+= .001
+    self.timer-= .016
     self.text.setText(f"Time:{self.timer}\nCredit Score: {self.credit}")
     self.updatePlayer()
     # base.cam.setPos(self.camTarg.getPos())
@@ -150,15 +179,16 @@ class Game(DirectObject):
 
 
       def animRun(speed):
-        self.playerM.setPlayRate(speed)
+        self.playerM.setPlayRate( speed,'run')
         if self.anim!='run':
           self.playerM.loop('run')
       def animIdle():
         if self.anim!='idle':
           self.playerM.loop('idle')
-
+      if self.swiping==True:
+          return
       if walking == True:
-          animRun()
+          animRun(1)
       if walking == False:
           animIdle()
       
@@ -186,7 +216,7 @@ class Game(DirectObject):
     self.worldNP = render.attachNewNode('World')
    
     self.timer = 0
-    self.credit = 0
+    self.credit = 1
     self.text = TextNode('text')
     self.textNP = aspect2d.attachNewNode(self.text)
     self.textNP.setScale(.08)
@@ -216,7 +246,7 @@ class Game(DirectObject):
 
     self.groundNP = self.worldNP.attachNewNode(BulletRigidBodyNode('Ground'))
     self.groundNP.node().addShape(shape)
-    self.groundNP.setPos(0, 0, -20)
+    self.groundNP.setPos(0, 0, -50)
     self.groundNP.setCollideMask(BitMask32.allOn())
 
     self.world.attachRigidBody(self.groundNP.node())
@@ -251,10 +281,18 @@ class Game(DirectObject):
     #lvl setup
     self.lvl = loader.loadModel('lvl.glb')
     self.lvl.reparentTo(self.worldNP)
-    self.geomcount = 1
+    self.geomcount = 6
+
+    self.scanPoints = []
+    for x in range(4):
+      u = self.lvl.find(f'p{x}')
+      self.scanPoints.append(u)
+
 
     for i in range(self.geomcount):
                         self.findTris(f'tri{i}',self.lvl)
+
+    self.collisionSetup()
 
   def make_collision_from_model(self, input_model, node_number, mass, world, target_pos,mask = BitMask32.bit(0),name ='input_model_tri_mesh'):
                 # tristrip generation from static models
@@ -292,21 +330,43 @@ class Game(DirectObject):
     traverser = CollisionTraverser('collider')
     base.cTrav = traverser
 
-     
-    self.found=self.oppa.attachNewNode(CollisionNode('oppafound'))
-    sphere =CollisionSphere(0,0,0, 1)
-    self.found.node().addSolid(sphere)
-    self.findoppa=self.playerNP.attachNewNode(CollisionNode('findoppa'))
-    sphere =CollisionSphere(0,1,0, 1)
-    self.findoppa.node().addSolid(sphere)
-
     self.collHandEvent = CollisionHandlerEvent()
     self.collHandEvent.addInPattern('%fn-into-%in') 
-    traverser.addCollider(self.findoppa, self.collHandEvent)
 
-    traverser.addCollider(self.found, self.collHandEvent)
+    self.charTrigger=self.playerM.attachNewNode(CollisionNode('player'))
+    sphere =CollisionSphere(0,0,0, 1.5)
+    self.charTrigger.node().addSolid(sphere)
+    self.charTrigger.show()
+    traverser.addCollider(self.charTrigger, self.collHandEvent)
 
-    self.accept('findoppa-into-oppafound', self.oppaFound)
+    self.scanPoints = []
+    for x in range(4):
+      u = self.lvl.find(f'p{x}')
+      self.scanPoints.append(u)
+      collider = u.attachNewNode(CollisionNode(f'sensor{x}'))
+      collider.node().addSolid(sphere)
+      collider.show()
+
+      traverser.addCollider(collider, self.collHandEvent)
+
+
+    # self.findoppa=self.playerNP.attachNewNode(CollisionNode('sensor'))
+    # sphere =CollisionSphere(0,1,0, 1)
+    # self.findoppa.node().addSolid(sphere)
+
+    # self.collHandEvent = CollisionHandlerEvent()
+    # self.collHandEvent.addInPattern('%fn-into-%in') 
+    # traverser.addCollider(self.findoppa, self.collHandEvent)
+
+    # traverser.addCollider(self.found, self.collHandEvent)
+
+    for i in range(len(self.scanPoints)):
+      self.accept(f'player-into-sensor{i}',self.doSwipe, extraArgs = [self.scanPoints[i]] )
+
+    #scanner hitboxes
+    # for i in range(len(self.scanPoints)):
+
+        
 
     # Bullet nodes should survive a flatten operation!
     #self.worldNP.flattenStrong()
