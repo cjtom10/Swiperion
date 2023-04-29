@@ -30,6 +30,8 @@ from panda3d.core import *
 from enemy import Vessel
 
 
+from spirit import Spirit
+
 class Game(DirectObject):
     def __init__(self):
         base.setBackgroundColor(0.1, 0.1, 0.8, 1)
@@ -169,17 +171,21 @@ class Game(DirectObject):
 
         # update enemy ai
         self.updateAi()
+        self.updateSpirit()
 
         return task.cont
+
+  
+    def updateSpirit(self):
+      if not self.spirit.isMoving:
+        self.spirit.takeAction()
 
     def updatePlayer(self):
         self.MP.setPos(self.boxNP.getPos(render))
         self.playerM.setPos(self.boxNP.getPos(render))
         self.playerM.setH(self.MP, self.charAngle)
-        if inputState.isSet('left'):
-            self.charAngle += 1
-        if inputState.isSet('right'):
-            self.charAngle -= 1
+        if inputState.isSet('left'):  self.charAngle+=1
+        if inputState.isSet('right'): self.charAngle -=1
 
         ### anims here
         print('char velocity', self.boxNP.node().getLinearVelocity().z)
@@ -290,6 +296,9 @@ class Game(DirectObject):
         shape = BulletSphereShape(1)
         self.charAngle = 0
         # shape = BulletCapsuleShape(1,1.5)
+
+        #enemy setup
+        self.spirit = Spirit(self.world, self.worldNP, self.playerM)
 
         self.boxNP = self.worldNP.attachNewNode(BulletRigidBodyNode('Box'))
         self.boxNP.node().setMass(1.0)
