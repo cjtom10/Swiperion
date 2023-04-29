@@ -1,377 +1,266 @@
 
-#from pandac.PandaModules import loadPrcFileData
-#loadPrcFileData('', 'load-display tinydisplay')
-
-#loadPrcFileData('', 'bullet-additional-damping true')
-#loadPrcFileData('', 'bullet-additional-damping-linear-factor 0.005')
-#loadPrcFileData('', 'bullet-additional-damping-angular-factor 0.01')
-#loadPrcFileData('', 'bullet-additional-damping-linear-threshold 0.01')
-#loadPrcFileData('', 'bullet-additional-damping-angular-threshold 0.01')
-from direct.actor.Actor import Actor
+from direct import showbase
+from direct.showbase.ShowBase import ShowBase
+from pandac.PandaModules import loadPrcFileData
+loadPrcFileData("", "win-size 1280 768")
+loadPrcFileData("", "sync-video t")
 import sys
+import time
 import direct.directbase.DirectStart
 
+from direct.actor.Actor import Actor
 from direct.showbase.DirectObject import DirectObject
 from direct.showbase.InputStateGlobal import inputState
-from direct.gui.OnscreenText import OnscreenText,TextNode
-from direct.gui.OnscreenImage import OnscreenImage
-from direct.gui.DirectGui import DGG, DirectButton, DirectFrame
-from direct.interval.LerpInterval import LerpFunc
-from direct.interval.IntervalGlobal import Sequence, Parallel, Func, Wait
-from direct.interval.LerpInterval import *
-from direct.interval.ActorInterval import ActorInterval, LerpAnimInterval
-import logging
-
-import simplepbr
-import gltf
-
 from panda3d.core import *
-from direct.gui.OnscreenText import OnscreenText
 from panda3d.bullet import *
+
+from mouseLook import MouseLook
+base.disableMouse()
+
+ml = MouseLook()
+ml.setMouseModeRelative(True)
+ml.setCursorHidden(True)
+ml.centerMouse = True
+ml.mouseLookMode = ml.MLMOrbit
+ml.disable()
+
+# props = WindowProperties()
+# props.setCursorHidden(True)
+# props.setMouseMode(WindowProperties.M_relative)
+# base.win.requestProperties(props)
+
+# To revert to normal mode:
+
+
+#~ base.accept("mouse2", ml.enable)
+#~ base.accept("mouse2-up", ml.disable)
+base.accept("wheel_up", ml.moveCamera, extraArgs = [Vec3(0, 1, 0)])
+base.accept("wheel_down", ml.moveCamera, extraArgs = [Vec3(0, -1, 0)])
+
+base.cam.node().getLens().setFov(70.0)
+
+globalClock.setMode(globalClock.MLimited) 
+globalClock.setFrameRate(120.0)
+
+from kcc import PandaBulletCharacterController
+
 
 class Game(DirectObject):
 
-  def __init__(self):
-    base.setBackgroundColor(0.1, 0.1, 0.8, 1)
-    base.setFrameRateMeter(True)
+    def __init__(self):
 
-    base.cam.setPos(0, -20, 4)
-    base.cam.lookAt(0, 0, 0)
+    # now, x and y can be considered relative movements
 
-    # Light
-    alight = AmbientLight('ambientLight')
-    alight.setColor(Vec4(0.5, 0.5, 0.5, 1))
-    alightNP = render.attachNewNode(alight)
+        base.setBackgroundColor(0.1, 0.1, 0.8, 1)
+        base.setFrameRateMeter(True)
+        
+        base.cam.setPos(0, -20, 4)
+        base.cam.lookAt(0, 0, 0)
 
-    dlight = DirectionalLight('directionalLight')
-    dlight.setDirection(Vec3(1, 1, -1))
-    dlight.setColor(Vec4(0.7, 0.7, 0.7, 1))
-    dlightNP = render.attachNewNode(dlight)
-
-    render.clearLight()
-    render.setLight(alightNP)
-    render.setLight(dlightNP)
-    self.setup()
-    # Input
-    self.accept('escape', self.doExit)
-    self.accept('r', self.doReset)
-    self.accept('f1', self.toggleWireframe)
-    self.accept('f2', self.toggleTexture)
-    self.accept('f3', self.toggleDebug)
-    self.accept('f5', self.doScreenshot)
-    self.accept('t', self.doSwipe,extraArgs = [self.scanPoints[0]])
-
-    inputState.watchWithModifiers('forward', 'w')
-    inputState.watchWithModifiers('left', 'a')
-    inputState.watchWithModifiers('reverse', 's')
-    inputState.watchWithModifiers('right', 'd')
-    inputState.watchWithModifiers('turnLeft', 'q')
-    inputState.watchWithModifiers('turnRight', 'e')
-
-    # Task
-    taskMgr.add(self.update, 'updateWorld')
-    self.swiping = False
-    # Physics
+        ml.resolveMouse()
+        
+        # Input
+        self.accept('escape', self.doExit)
+        self.accept('space', self.doJump)
+        self.accept('c', self.doCrouch)
+        self.accept('c-up', self.stopCrouch)
+        
+        self.accept('control', self.startFly)
+        self.accept('control-up', self.stopFly)
+        
+        inputState.watchWithModifiers('forward', 'w')
+        inputState.watchWithModifiers('left', 'a')
+        inputState.watchWithModifiers('reverse', 's')
+        inputState.watchWithModifiers('right', 'd')
+        inputState.watchWithModifiers('turnLeft', 'q')
+        inputState.watchWithModifiers('turnRight', 'e')
+        
+        inputState.watchWithModifiers('run', 'shift')
+        
+        inputState.watchWithModifiers('flyUp', 'r')
+        inputState.watchWithModifiers('flyDown', 'f')
+        
+        # Task
+        taskMgr.add(self.update, 'updateWorld')
+        
+        # Physics
+        self.setup()
+        
+        # _____HANDLER_____
     
-    self.camPos = self.camTarg.getPos(render)
-  def doSwipe(self, swipepoint, entry):
-      #puts
-      self.swiping = True
-      self.boxNP.node().setLinearVelocity((0,0,0))
-      # h = 
-      # p = LerpPosHprInterval(self.playerM, .01, )
-      p = LerpPosInterval(self.boxNP, .2,(0,3,1), other=swipepoint )
-      a = self.playerM.actorInterval( 'swipe',0,startFrame = 0, endFrame = 40)
-      self.credit+=1
-      
-      def end():
-          self.swiping = False
-      f = Func(end)
-      seq = Sequence(p,a,f).start()
-
-  # _____HANDLER_____
-
-
-  def doExit(self):
-    self.cleanup()
-    sys.exit(1)
-
-  def doReset(self):
-    self.cleanup()
-    self.setup()
-
-  def toggleWireframe(self):
-    base.toggleWireframe()
-
-  def toggleTexture(self):
-    base.toggleTexture()
-
-  def toggleDebug(self):
-    if self.debugNP.isHidden():
-      self.debugNP.show()
-    else:
-      self.debugNP.hide()
-
-  def doScreenshot(self):
-    base.screenshot('Bullet')
-
-  # ____TASK___
-
-  def processInput(self, dt, fo):
-    force = Vec3(0, 0, 0)
-    torque = Vec3(0, 0, 0)
-
-    if inputState.isSet('forward'): force.setY( 1.0)
-    if inputState.isSet('reverse'): force.setY(-1.0)
-    if inputState.isSet('left'):    force.setX(-1.0),torque.setZ( .05)
-    if inputState.isSet('right'):   force.setX( 1.0),torque.setZ(-.05)
-    if inputState.isSet('turnLeft'):  torque.setZ( .5)
-    if inputState.isSet('turnRight'): torque.setZ(-.5)
+    def doExit(self):
+        self.cleanup()
+        sys.exit(1)
     
-    #force increases with credit score
-    force *= fo
-    torque *= 2.0
-
-    force = render.getRelativeVector(self.playerM, force)
-    torque = render.getRelativeVector(self.playerM, torque)
-
-    self.boxNP.node().setActive(True)
-    self.boxNP.node().applyCentralForce(force)
-    self.boxNP.node().applyTorque(torque)
-
-  def doJump(self):
+    def doJump(self):
+        self.character.startJump(10)
     
-    pass
-  def update(self, task):
-    dt = globalClock.getDt()
-
-    f = self.credit * 2
-    if self.swiping==False:
-      self.processInput(dt, f)
-    #self.world.doPhysics(dt)
-    # self.boxNP.setP(0)
-    # self.boxNP.setR(0)
-    self.world.doPhysics(dt, 5, 1.0/180.0)
-
-    self.camdelay(2)
-    self.timer-= .016
-    self.text.setText(f"Time:{self.timer}\nCredit Score: {self.credit}")
-    self.updatePlayer()
-    # base.cam.setPos(self.camTarg.getPos())
+    def doCrouch(self):
+        self.character.startCrouch()
     
-    return task.cont
-  def updatePlayer(self):
-      self.MP.setPos(self.boxNP.getPos(render))
-      self.playerM.setPos(self.boxNP.getPos(render))
-      self.playerM.setH(self.MP, self.charAngle)
-      if inputState.isSet('left'):  self.charAngle+=1
-      if inputState.isSet('right'): self.charAngle -=1
-
-      ### anims here
-      print('char velocity', self.boxNP.node().getLinearVelocity().z)
-
-      if abs(self.boxNP.node().getLinearVelocity().y) > .3:
-          walking = True
-      else:
-          walking = False
-      
-      self.anim=self.playerM.getCurrentAnim()
-
-
-      def animRun(speed):
-        self.playerM.setPlayRate( speed,'run')
-        if self.anim!='run':
-          self.playerM.loop('run')
-      def animIdle():
-        if self.anim!='idle':
-          self.playerM.loop('idle')
-      if self.swiping==True:
-          return
-      if walking == True:
-          animRun(1)
-      if walking == False:
-          animIdle()
-      
-      # self.playerM
-  def camdelay(self, t):
+    def stopCrouch(self):
+        self.character.stopCrouch()
     
-    self.camPos += (self.boxNP.getPos(render) - self.camTarg.getPos(render)) * t
-    # self.camTarg.setPos(self.camPos)
-    self.camTarg.setPos(self.playerM.getPos(render))
-    self.camTarg.setH(self.playerM.getH(render))
-
+    def startFly(self):
+        self.character.startFly()
     
-  def cleanup(self):
-    self.world.removeRigidBody(self.groundNP.node())
-    self.world.removeRigidBody(self.boxNP.node())
-    self.world = None
-
-    self.debugNP = None
-    self.groundNP = None
-    self.boxNP = None
-
-    self.worldNP.removeNode()
-
-  def setup(self):
-    self.worldNP = render.attachNewNode('World')
-   
-    self.timer = 0
-    self.credit = 1
-    self.text = TextNode('text')
-    self.textNP = aspect2d.attachNewNode(self.text)
-    self.textNP.setScale(.08)
-    self.textNP.setPos(-.9,0,-.6)
+    def stopFly(self):
+        self.character.stopFly()
     
+    def processInput(self, dt):
+        speed = Vec3(0, 0, 0)
+        omega = 0.0
+        
+        v = 5.0
+        
+        if inputState.isSet('run'): v = 15.0
+        
+        if inputState.isSet('forward'): speed.setY(v)
+        if inputState.isSet('reverse'): speed.setY(-v)
+        if inputState.isSet('left'):    speed.setX(-v)
+        if inputState.isSet('right'):   speed.setX(v)
+        
+        if inputState.isSet('flyUp'):   speed.setZ( 2.0)
+        if inputState.isSet('flyDown'):   speed.setZ( -2.0)
+        
+        if inputState.isSet('turnLeft'):  omega =  120.0
+        if inputState.isSet('turnRight'): omega = -120.0
 
-    # World
-    self.debugNP = self.worldNP.attachNewNode(BulletDebugNode('Debug'))
-    self.debugNP.show()
-    self.debugNP.node().showWireframe(True)
-    self.debugNP.node().showConstraints(True)
-    self.debugNP.node().showBoundingBoxes(False)
-    self.debugNP.node().showNormals(True)
-
-    #self.debugNP.showTightBounds()
-    #self.debugNP.showBounds()
-    self.camTarg = self.worldNP.attachNewNode('cam target')
-    base.cam.reparentTo(self.camTarg)
-    base.cam.setPos(0,-10,3)
-
-    self.world = BulletWorld()
-    self.world.setGravity(Vec3(0, 0, -9.81))
-    self.world.setDebugNode(self.debugNP.node())
-
-    # Ground (static)
-    shape = BulletPlaneShape(Vec3(0, 0, 1), 1)
-
-    self.groundNP = self.worldNP.attachNewNode(BulletRigidBodyNode('Ground'))
-    self.groundNP.node().addShape(shape)
-    self.groundNP.setPos(0, 0, -50)
-    self.groundNP.setCollideMask(BitMask32.allOn())
-
-    self.world.attachRigidBody(self.groundNP.node())
-
-    # player setup
-    self.playerM = Actor('char.bam',{ 
-                         'idle':'char_IDLE.bam',
-                         'run':'char_RUN.bam',
-                         'jump':'char_jump.bam',
-                         'swipe': 'char_swipe.bam'} )
-    self.playerM.reparentTo(self.worldNP)
-    self.playerM.setZ(-1)
-    self.MP = render.attachNewNode('movementparent')
-    shape = BulletSphereShape(1)
-    self.charAngle = 0
-    # shape = BulletCapsuleShape(1,1.5)
-
-    self.boxNP = self.worldNP.attachNewNode(BulletRigidBodyNode('Box'))
-    self.boxNP.node().setMass(1.0)
-    self.boxNP.node().addShape(shape)
-    self.boxNP.setPos(0, 0, 5)
-    #self.boxNP.setScale(2, 1, 0.5)
-    self.boxNP.setCollideMask(BitMask32.allOn())
-    #self.boxNP.node().setDeactivationEnabled(False)
-
-    self.world.attachRigidBody(self.boxNP.node())
-
-    visualNP = loader.loadModel('models/box.egg')
-    visualNP.clearModelNodes()
-    visualNP.reparentTo(self.boxNP)
-    
-    #lvl setup
-    self.lvl = loader.loadModel('lvl.glb')
-    self.lvl.reparentTo(self.worldNP)
-    self.geomcount = 6
-
-    self.scanPoints = []
-    for x in range(4):
-      u = self.lvl.find(f'p{x}')
-      self.scanPoints.append(u)
-
-
-    for i in range(self.geomcount):
-                        self.findTris(f'tri{i}',self.lvl)
-
-    self.collisionSetup()
-
-  def make_collision_from_model(self, input_model, node_number, mass, world, target_pos,mask = BitMask32.bit(0),name ='input_model_tri_mesh'):
-                # tristrip generation from static models
-                # generic tri-strip collision generator begins
-                geom_nodes = input_model.find_all_matches('**/+GeomNode')
-                geom_nodes = geom_nodes.get_path(node_number).node()
-                # print(geom_nodes)
-                geom_target = geom_nodes.get_geom(0)
-                # print(geom_target)
-                output_bullet_mesh = BulletTriangleMesh()
-                output_bullet_mesh.add_geom(geom_target)
-                tri_shape = BulletTriangleMeshShape(output_bullet_mesh, dynamic=False)
-                print(output_bullet_mesh)
-
-                body = BulletRigidBodyNode(name)
-                np = render.attach_new_node(body)
-                np.node().add_shape(tri_shape)
-                np.node().set_mass(mass)
-                np.node().set_friction(0.01)
-                np.set_pos(target_pos)
-                np.set_scale(1)
-                # np.set_h(180)
-                # np.set_p(180)
-                # np.set_r(180)
-                # np.set_collide_mask(BitMask32.allOn())
-                np.set_collide_mask(mask)
-                
-                world.attach_rigid_body(np.node())
-   
-  def findTris(self, name, model):
-                shape = model.find(name)
-                self.make_collision_from_model(shape,0,0,self.world,shape.getPos())
-
-  def collisionSetup(self):
-    traverser = CollisionTraverser('collider')
-    base.cTrav = traverser
-
-    self.collHandEvent = CollisionHandlerEvent()
-    self.collHandEvent.addInPattern('%fn-into-%in') 
-
-    self.charTrigger=self.playerM.attachNewNode(CollisionNode('player'))
-    sphere =CollisionSphere(0,0,0, 1.5)
-    self.charTrigger.node().addSolid(sphere)
-    self.charTrigger.show()
-    traverser.addCollider(self.charTrigger, self.collHandEvent)
-
-    self.scanPoints = []
-    for x in range(4):
-      u = self.lvl.find(f'p{x}')
-      self.scanPoints.append(u)
-      collider = u.attachNewNode(CollisionNode(f'sensor{x}'))
-      collider.node().addSolid(sphere)
-      collider.show()
-
-      traverser.addCollider(collider, self.collHandEvent)
-
-
-    # self.findoppa=self.playerNP.attachNewNode(CollisionNode('sensor'))
-    # sphere =CollisionSphere(0,1,0, 1)
-    # self.findoppa.node().addSolid(sphere)
-
-    # self.collHandEvent = CollisionHandlerEvent()
-    # self.collHandEvent.addInPattern('%fn-into-%in') 
-    # traverser.addCollider(self.findoppa, self.collHandEvent)
-
-    # traverser.addCollider(self.found, self.collHandEvent)
-
-    for i in range(len(self.scanPoints)):
-      self.accept(f'player-into-sensor{i}',self.doSwipe, extraArgs = [self.scanPoints[i]] )
-
-    #scanner hitboxes
-    # for i in range(len(self.scanPoints)):
+        self.character.setAngularMovement(omega)
+        self.character.setLinearMovement(speed, True)
+        
+    def update(self, task):
+        dt = globalClock.getDt()
+        
+        self.processInput(dt)
+        
+        oldCharPos = self.character.getPos(render)
+        self.character.setH(base.camera.getH(render))
+        self.character.update() # WIP
+        newCharPos = self.character.getPos(render)
+        delta = newCharPos - oldCharPos
 
         
+        self.world.doPhysics(dt, 4, 1./120.)
+        
 
-    # Bullet nodes should survive a flatten operation!
-    #self.worldNP.flattenStrong()
-    #render.ls()
+        char2cam = self.character.getY(base.cam)
+        print('char dist to cam:', char2cam)
+        # ml.orbitCenter = self.character.getPos(render)
+        # base.camera.setPos(base.camera.getPos(render) + delta)
+        
+        return task.cont
+        
+    def cleanup(self):
+        self.world = None
+        self.worldNP.removeNode()
+        
+    def setup(self):
+        self.worldNP = render.attachNewNode('World')
+
+        # World
+        self.debugNP = self.worldNP.attachNewNode(BulletDebugNode('Debug'))
+        self.debugNP.show()
+
+        self.world = BulletWorld()
+        self.world.setGravity(Vec3(0, 0, -9.81))
+        self.world.setDebugNode(self.debugNP.node())
+
+        # Ground
+        shape = BulletPlaneShape(Vec3(0, 0, 1.0), 0)
+        
+        np = self.worldNP.attachNewNode(BulletRigidBodyNode('Ground'))
+        np.node().addShape(shape)
+        np.setPos(0, 0, 0)
+        np.setCollideMask(BitMask32.allOn())
+        
+        cm = CardMaker('ground')
+        cm.setFrame(-20, 20, -20, 20)
+        gfx = render.attachNewNode(cm.generate())
+        gfx.setP(-90)
+        gfx.setZ(-0.01)
+        gfx.setColorScale(Vec4(0.4))
+        
+        self.world.attachRigidBody(np.node())
+        
+        
+        X = 0.3
+        Y = 4.0
+        Z = 1.5
+        
+        stepsY = 1.5
+        
+        # shapesData = [
+        #     dict(name = 'wall0', size = Vec3(X, Y, Z), pos = Point3(Y*2.0, -(Y + stepsY), Z), hpr = Vec3()),
+        #     dict(name = 'wall1', size = Vec3(X, Y, Z), pos = Point3(Y*2.0, (Y + stepsY), Z), hpr = Vec3()),
+            
+        #     dict(name = 'wall4', size = Vec3(X, Y, Z), pos = Point3(Y, (Y*2.0 + stepsY - X), Z), hpr = Vec3(90, 0, 0)),
+        #     dict(name = 'wall5', size = Vec3(X, Y, Z), pos = Point3(-Y, (Y*2.0 + stepsY - X), Z), hpr = Vec3(90, 0, 0)),
+        #     dict(name = 'wall6', size = Vec3(X, Y, Z), pos = Point3(Y, -(Y*2.0 + stepsY - X), Z), hpr = Vec3(90, 0, 0)),
+        #     dict(name = 'wall7', size = Vec3(X, Y, Z), pos = Point3(-Y, -(Y*2.0 + stepsY - X), Z), hpr = Vec3(90, 0, 0)),
+            
+        #     dict(name = 'ceiling', size = Vec3(Y, Y*2.0, X), pos = Point3(0, -(Y + stepsY - X), Z), hpr = Vec3(90, 0, 0)),
+        #     dict(name = 'ceiling', size = Vec3(Y, Z, X), pos = Point3(-Z, (Y + stepsY - X), Z*2.0-X), hpr = Vec3(90, 0, 0)),
+        #     dict(name = 'ceiling', size = Vec3(Y, Z, X), pos = Point3(Z, (Y + stepsY - X), Z*4.0-X), hpr = Vec3(90, 0, 0)),
+            
+        #     # CHANGE ROTATION TO TEST DIFFERENT SLOPES
+        #     dict(name = 'slope', size = Vec3(20, stepsY+Y*2.0, X), pos = Point3(-Y*2.0, 0, 0), hpr = Vec3(0, 0, 50)),
+        # ]
+        
+        # for i in range(10):
+        #     s = Vec3(0.4, stepsY, 0.2)
+        #     p = Point3(Y*2.0 + i * s.x * 2.0, 0, s.z + i * s.z * 2.0)
+        #     data = dict(name = 'Yall', size = s, pos = p, hpr = Vec3())
+        #     shapesData.append(data)
+        
+        # for data in shapesData:
+        #     shape = BulletBoxShape(data['size'])
+            
+        #     np = self.worldNP.attachNewNode(BulletRigidBodyNode(data['name']))
+        #     np.node().addShape(shape)
+        #     np.setPos(data['pos'])
+        #     np.setHpr(data['hpr'])
+        #     np.setCollideMask(BitMask32.allOn())
+            
+        #     self.world.attachRigidBody(np.node())
+        
+        # shape = BulletSphereShape(0.5)
+        # np = self.worldNP.attachNewNode(BulletRigidBodyNode('Ball'))
+        # np.node().addShape(shape)
+        # np.node().setMass(10.0)
+        # np.setPos(13.0, 0, 5.0)
+        # np.setCollideMask(BitMask32.allOn())
+        # self.world.attachRigidBody(np.node())
+        
+        # shape = BulletBoxShape(Vec3(0.5))
+        # np = self.worldNP.attachNewNode(BulletRigidBodyNode('Crate'))
+        # np.node().addShape(shape)
+        # np.node().setMass(10.0)
+        # np.setPos(-13.0, 0, 10.0)
+        # np.setCollideMask(BitMask32.allOn())
+        # self.world.attachRigidBody(np.node())
+        
+        
+        # shape = BulletBoxShape(Vec3(1, 1, 2.5))
+        # self.ghost = self.worldNP.attachNewNode(BulletGhostNode('Ghost'))
+        # self.ghost.node().addShape(shape)
+        # self.ghost.setPos(-5.0, 0, 3)
+        # self.ghost.setCollideMask(BitMask32.allOn())
+        # self.world.attachGhost(self.ghost.node())
+        
+        # taskMgr.add(self.checkGhost, 'checkGhost')
+        
+        self.character = PandaBulletCharacterController(self.world, self.worldNP, 1.75, 1.3, 0.5, 0.4)
+        self.character.setPos(render, Point3(0, 0, 0.5))
+    
+    def checkGhost(self, task):
+        pass
+        # ghost = self.ghost.node()
+        # for node in ghost.getOverlappingNodes():
+        #     print ("Ghost collides with", node)
+        # return task.cont
 
 game = Game()
 run()
+
 
