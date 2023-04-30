@@ -14,6 +14,8 @@ from direct.showbase.InputStateGlobal import inputState
 from panda3d.core import *
 from panda3d.bullet import *
 
+import math
+
 from mouseLook import MouseLook
 base.disableMouse()
 
@@ -54,7 +56,7 @@ class Game(DirectObject):
         base.setBackgroundColor(0.1, 0.1, 0.8, 1)
         base.setFrameRateMeter(True)
         
-        base.cam.setPos(0, -20, 4)
+        base.cam.setPos(0, -30, 20)
         base.cam.lookAt(0, 0, 0)
 
         ml.resolveMouse()
@@ -93,7 +95,7 @@ class Game(DirectObject):
         sys.exit(1)
     
     def doJump(self):
-        self.character.startJump(10)
+        self.character.startJump(3)
     
     def doCrouch(self):
         self.character.startCrouch()
@@ -108,26 +110,30 @@ class Game(DirectObject):
         self.character.stopFly()
     
     def processInput(self, dt):
-        speed = Vec3(0, 0, 0)
+        self.speed = Vec3(0, 0, 0)
         omega = 0.0
         
         v = 5.0
         
         if inputState.isSet('run'): v = 15.0
         
-        if inputState.isSet('forward'): speed.setY(v)
-        if inputState.isSet('reverse'): speed.setY(-v)
-        if inputState.isSet('left'):    speed.setX(-v)
-        if inputState.isSet('right'):   speed.setX(v)
+        if inputState.isSet('forward'): self.speed.setY(v)
+        if inputState.isSet('reverse'): self.speed.setY(-v)
+        if inputState.isSet('left'):    self.speed.setX(-v)
+        if inputState.isSet('right'):   self.speed.setX(v)
         
-        if inputState.isSet('flyUp'):   speed.setZ( 2.0)
-        if inputState.isSet('flyDown'):   speed.setZ( -2.0)
+        if inputState.isSet('flyUp'):   self.speed.setZ( 2.0)
+        if inputState.isSet('flyDown'):   self.speed.setZ( -2.0)
         
         if inputState.isSet('turnLeft'):  omega =  120.0
         if inputState.isSet('turnRight'): omega = -120.0
 
         self.character.setAngularMovement(omega)
-        self.character.setLinearMovement(speed, True)
+        self.character.setLinearMovement(self.speed, True)
+
+        if self.speed != Vec3(0,0,0):
+         self.playerAngle = math.atan2(-self.speed.x, self.speed.y)
+        self.playerM.setH(math.degrees(self.playerAngle))
         
     def update(self, task):
         dt = globalClock.getDt()
@@ -145,10 +151,11 @@ class Game(DirectObject):
         
 
         char2cam = self.character.getY(base.cam)
-        print('char dist to cam:', char2cam)
+        # print('char dist to cam:', char2cam) 
+        base.camera.setY(self.character.getY())
         # ml.orbitCenter = self.character.getPos(render)
         # base.camera.setPos(base.camera.getPos(render) + delta)
-        
+        self.updatePlayer()
         return task.cont
         
     def cleanup(self):
@@ -183,7 +190,20 @@ class Game(DirectObject):
         
         self.world.attachRigidBody(np.node())
         
-        
+        spirit = loader.loadModel('spirit.bam')
+        spirit.reparentTo(render)
+
+        #player setup 
+        self.character = PandaBulletCharacterController(self.world, self.worldNP, 1.75, 1.3, 0.5, 0.4)
+        self.character.setPos(render, Point3(0, 0, 0.5))
+        self.playerM = Actor('models/player/player.bam',{
+                                'walk': 'models/player/player_walking.bam',
+                                'idle': 'models/player/player_Idle.bam'
+        })
+        self.playerM.reparentTo(self.character.movementParent)
+        self.playerIdle = True
+        self.playerAngle = 0
+
         X = 0.3
         Y = 4.0
         Z = 1.5
@@ -250,15 +270,32 @@ class Game(DirectObject):
         
         # taskMgr.add(self.checkGhost, 'checkGhost')
         
-        self.character = PandaBulletCharacterController(self.world, self.worldNP, 1.75, 1.3, 0.5, 0.4)
-        self.character.setPos(render, Point3(0, 0, 0.5))
     
+    def lvlSetup(self):
+        self.lvl = self.worldNP.attachNewNode('lvl')
+        
+    def updatePlayer(self):
+        if self.character.isOnGround():
+            if self.speed !=0:
+                anim = 'walk'
+            else: anim = 'idle'
+            if self.playerM.getCurrentAnim()!=anim:    
+                self.playerM.setPlayRate(1,anim )
+                self.playerM.play(anim)
+                # print('anim = ', anim, self.playerM.getCurrentAnim)
+            else:
+                return
     def checkGhost(self, task):
         pass
         # ghost = self.ghost.node()
         # for node in ghost.getOverlappingNodes():
         #     print ("Ghost collides with", node)
         # return task.cont
+    # def updatePlayer(self):
+        
+    #     else:
+
+    #         self.playerIdle = True
 
 game = Game()
 run()
