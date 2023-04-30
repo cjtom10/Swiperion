@@ -177,8 +177,14 @@ class Game(DirectObject):
 
   
     def updateSpirit(self):
-      if not self.spirit.isMoving:
-        self.spirit.takeAction()
+        if self.spirit.state == "float":
+            self.spirit.floatUp()
+        elif self.spirit.state == "oscillate":
+            self.spirit.oscillate()
+        elif self.spirit.state == "decide":
+            self.spirit.decideTarget(self.playerM)
+        elif self.spirit.state == "move":
+            self.spirit.takeAction()
 
     def updatePlayer(self):
         self.MP.setPos(self.boxNP.getPos(render))

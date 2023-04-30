@@ -18,15 +18,41 @@ class Spirit(DirectObject):
         spirit_node.setMass(1.0)
         spirit_node.addShape(spirit_shape)
         self.spirit_np = worldNP.attachNewNode(spirit_node)
-        self.spirit_np.setPos(0,10,5)
+        self.spirit_np.setPos(0,2,2)
         world.attachRigidBody(spirit_node)
 
         self.moveSequence = None  # Initialize move sequence to None
         self.playerPositions = []  # Initialize list of player positions\
         self.initialChasePos = None
-        self.isMoving = False  # Initialize moving flag to False
-        self.decideTarget(playerM)
-        # self.takeAction()  # Start chasing the player
+        self.state = "float"
+
+    def floatUp(self):
+        endPos = self.spirit_np.getPos()
+        endPos.setY(endPos.getY() + 10)
+        self.floatSequence = Sequence( 
+            LerpPosInterval(self.spirit_np, 5, endPos),
+            Func(self.onFloatFinished)  # Call onFloatFinished when float sequence finishes
+        )
+        self.floatSequence.start()  
+
+    def onFloatFinished(self):
+        self.state = "oscillate"
+
+    def oscillate(self):
+        upTime = 1 #time for spirit moving up
+        downTime = 1 #time for spirit move down
+        height = self.spirit_np.getY()
+        oscillateSequence = Sequence(
+            LerpFunc(self.spirit_np.setY, duration=upTime, fromData=height-5, toData=height, blendType="easeInOut"),
+            LerpFunc(self.spirit_np.setY, duration=downTime, fromData=height, toData=height-5, blendType="easeInOut"),
+            LerpFunc(self.spirit_np.setY, duration=upTime, fromData=height-5, toData=height, blendType="easeInOut"),
+            LerpFunc(self.spirit_np.setY, duration=downTime, fromData=height, toData=height-5, blendType="easeInOut"),
+            Func(self.onOscillateFinished)
+        )
+        oscillateSequence.start()
+
+    def onOscillateFinished(self):
+        self.state = "decide"
 
     def decideTarget(self, playerM):
         spirit_to_player_dist = self.spirit_np.getPos() - playerM.getPos()
@@ -36,6 +62,7 @@ class Spirit(DirectObject):
         else:
             # slef.char_to_move_to
             pass
+        self.state = "move"
 
     def takeAction(self):
         if self.isMoving:
@@ -55,7 +82,7 @@ class Spirit(DirectObject):
         self.moveSequence.start()  
 
     def onMoveFinished(self):
-        self.isMoving = False  # Set moving flag to False
+        self.state = "die"
         self.spirit_np.setPos(9999,9999,9999)
         # TODO what to do when reached position
     
