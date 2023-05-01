@@ -71,7 +71,7 @@ class Game(DirectObject):
         base.setBackgroundColor(0.1, 0.1, 0.8, 1)
         base.setFrameRateMeter(True)
 
-        base.cam.setPos(0, -20, 10)
+        base.cam.setPos(0, -13, 7)
         base.cam.lookAt(0, 0, 0)
 
         ml.resolveMouse()
@@ -196,20 +196,21 @@ class Game(DirectObject):
         if self.speed != Vec3(0, 0, 0):
             self.playerM.setH(self.angle)
         print('attacl no', self.currentStrike)
-        self.character.atkDir = self.playerM.getQuat().getForward()
+        # self.character.atkDir = self.playerM.getQuat().getForward() maybe set this during active frames
+
         # self.speed = 0
         self.isAttacking = True
         self.character.movementState = 'attacking'
         if self.currentStrike == 1:
-            self.atkAnim('strike1', 4, 20)
+            self.atkAnim('strike1', 4, 20,self.playerATKNode, self.handL, CollisionSphere(0,0,0,.5))
             self.currentStrike += 1
             return
         if self.currentStrike == 2:
-            self.atkAnim('strike2', 4, 20)
+            self.atkAnim('strike2', 4, 20,self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5))
             self.currentStrike += 1
             return
         if self.currentStrike == 3:
-            self.atkAnim('strike3', 4, 20)
+            self.atkAnim('strike3', 4, 20,self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5))
             self.currentStrike += 1
             #     return
         # if self.currentStrike==2:
@@ -238,6 +239,9 @@ class Game(DirectObject):
             f'prayer{no}',
             4,
             16,
+            self.playerParrynode,
+            self.playerM,
+            CollisionSphere(0,0,3,2)
         )
         #     self.atkAnim('strike2', 4,8)
         #     self.currentStrike +=1
@@ -288,13 +292,13 @@ class Game(DirectObject):
             # self.finish()
             # if type == 'slash':
             if self.currentStrike == 2:
-                self.atkAnim('strike2', 4, 20)
+                self.atkAnim('strike2', 4, 20, self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5))
                 self.isAttacking = True
                 self.currentStrike += 1
                 self.attackQueued = False
                 return
             if self.currentStrike == 3:
-                self.atkAnim('strike3', 4, 20)
+                self.atkAnim('strike3', 4, 20,self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5))
                 self.isAttacking = True
                 self.currentStrike += 1
                 self.attackQueued = False
@@ -302,7 +306,7 @@ class Game(DirectObject):
             return
 
     # def atkAnim(self,order,)
-    def atkAnim(self, anim, activeFrame, bufferFrame):
+    def atkAnim(self, anim, activeFrame, bufferFrame, node, bone, shape):
 
         if self.animSeq is not None:  # end attack anim sequence
             if self.animSeq.isPlaying():
@@ -325,7 +329,10 @@ class Game(DirectObject):
         fin = Func(self.finishAction)
         c4q = Func(self.check4Queue)
 
-        self.animSeq = Sequence(a1, active, atkF, c4q, buffer, fin)
+        hB = Func(self.attachHB, bone, node, shape)
+        noHB = Func(self.detachHB, node)
+
+        self.animSeq = Sequence(a1, hB,active, atkF, c4q, buffer,noHB, fin)
         self.animSeq.start()
 
     # def prayerAnim(self,anim):
@@ -348,7 +355,14 @@ class Game(DirectObject):
     #  if self.character.state == "mech":
     #  self.hb(parent=self.bladeL, node = self.atkNode, shape=CollisionCapsule(0, .5, 0, 0, 2, 0, 1))
     #  self.hb(parent=self.bladeR, node = self.atkNode, shape=CollisionCapsule(0, .5, 0, 0, 2, 0, 1))
-    def hb(self, parent, node, shape, pos=(0, 0, 0), visible=True):
+    # def attach(self,bone):
+       
+    #     if self.attached == False: #and self.hitcontact==False:
+        
+           
+    #        self.hb(parent=bone, node = self.atkNode, shape=CollisionCapsule(0, .5, 0, 0, 0, 0, .5))
+
+    def attachHB(self, parent, node, shape, pos=(0, 0, 0), visible=True):
         """player hitboxes for attacks/parries"""
         # self.character.movementState = "attacking"
 
@@ -374,6 +388,9 @@ class Game(DirectObject):
         # self.rightfootHB.setP(90)
         # self.rightfootHB.node().addShape(shape)
         # self.world.attachGhost(self.rightfootHB.node())
+    def detachHB(self, node):
+        node.node().clearSolids()
+        self.attached = False
 
     def finishAction(self):
         self.atkQueue = None
@@ -382,6 +399,11 @@ class Game(DirectObject):
             self.animSeq.pause()
             self.animSeq = None
         self.attackQueued = False
+
+        if self.attached == True:
+            self.detachHB(self.playerATKNode)
+            self.detachHB(self.playerParrynode)
+        
 
     #  self.currentStrike =1
     def stopCrouch(self):
@@ -530,6 +552,10 @@ class Game(DirectObject):
                 'prayer2': 'models/player/player_pray2.bam',
             },
         )
+        self.handR = self.playerM.expose_joint(None, 'modelRoot', 'Hand.R')
+        self.handL = self.playerM.expose_joint(None, 'modelRoot', 'Hand.L')
+
+        self.playerM.setScale(.5)
         self.playerM.reparentTo(self.character.movementParent)
         self.playerIdle = True
 
@@ -544,6 +570,8 @@ class Game(DirectObject):
         Z = 1.5
 
         stepsY = 1.5
+
+        self.collisionSetup()
 
         # shapesData = [
         #     dict(name = 'wall0', size = Vec3(X, Y, Z), pos = Point3(Y*2.0, -(Y + stepsY), Z), hpr = Vec3()),
@@ -637,6 +665,8 @@ class Game(DirectObject):
         #     self.character.movementState == "jumping":
         #         if(currentAnim)!="jump":
         # print(self.character.movementState)
+        if self.character.isOnGround() and self.character.movePoints!=3:
+            self.character.movePoints=3
 
         # set angle here
         self.angle = (
@@ -738,7 +768,17 @@ class Game(DirectObject):
     def collisionSetup(self):
         traverser = CollisionTraverser('collider')
         base.cTrav = traverser
+        
+        self.collHandEvent = CollisionHandlerEvent()
+        self.playerATKNode = self.playerM.attachNewNode(CollisionNode('playeratk'))
+        self.playerParrynode = self.playerM.attachNewNode(CollisionNode('playerParry'))
 
+        traverser.addCollider(self.playerATKNode, self.collHandEvent)
+        traverser.addCollider(self.playerParrynode, self.collHandEvent)
+
+        
+#         self.collHandEvent.addInPattern('%fn-into-%in') 
+#         self.collHandEvent.addOutPattern('%fn-out-%(tag)ih')
     def checkGhost(self, task):
         pass
         # ghost = self.ghost.node()
