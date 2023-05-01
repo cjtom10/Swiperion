@@ -25,6 +25,7 @@ class Spirit(DirectObject):
         self.playerPositions = []  # Initialize list of player positions\
         self.initialChasePos = None
         self.state = "float"
+        self.isMoving = False
 
     def floatUp(self):
         endPos = self.spirit_np.getPos()
