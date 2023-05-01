@@ -117,9 +117,13 @@ class Vessel:
         self.is_possessed = is_possessed
         self.state = 'pursue'
 
+    def is_playing_any(self, *anims):
+        current_anim = self.possessed_model.getCurrentAnim()
+        return any(current_anim == anim for anim in anims)
+
     def is_player_in_range(self, distance: int = 5):
-        player_pos = self.player.getPos()
-        vessel_pos = self.possessed_model.getPos()
+        player_pos = self.player.getPos(render)
+        vessel_pos = self.possessed_model.getPos(render)
         return (player_pos - vessel_pos).length() <= distance
 
     def pursue_player(self, task=None):
@@ -128,13 +132,19 @@ class Vessel:
             return
         self.possessed_model.loop('run')
 
+    def pursue_player(self, task=None):
+        if self.is_playing_any('run'):
+            return
+        self.aiBehaviors.pursue(self.player)
+        self.possessed_model.loop('run')
+
     def attack(self, task=None):
         attack = random.choice(list(self.attack_methods.keys()))
         self.attack_methods[attack]()
         self.state = 'attack'
 
     def slash1(self):
-        if self.possessed_model.getCurrentAnim() == 'slash1':
+        if self.is_playing_any('slash1'):
             return
         self.possessed_model.play('slash1')
         self.taskMgr.doMethodLater(
@@ -143,14 +153,8 @@ class Vessel:
             f'{self.name}_slash2_or_pursue',
         )
 
-    def slash1_post(self, task=None):
-        self.slash2() if self.is_player_in_range() else self.pursue_player()
-
-    def attack_post(self, task=None):
-        self.attack() if self.is_player_in_range() else self.pursue_player()
-
     def slash2(self):
-        if self.possessed_model.getCurrentAnim() == 'slash2':
+        if self.is_playing_any('slash2'):
             return
         self.possessed_model.play('slash2')
         self.taskMgr.doMethodLater(
@@ -161,7 +165,7 @@ class Vessel:
         self.state = 'pursue'
 
     def stab(self):
-        if self.possessed_model.getCurrentAnim() == 'stab':
+        if self.is_playing_any('stab'):
             return
         self.possessed_model.play('stab')
         self.taskMgr.doMethodLater(
@@ -171,9 +175,19 @@ class Vessel:
         )
         self.state = 'pursue'
 
+    def slash1_post(self, task=None):
+        self.slash2() if self.is_player_in_range() else self.pursue_player()
+
+    def attack_post(self, task=None):
+        self.attack() if self.is_player_in_range() else self.pursue_player()
+
     def update(self, task=None):
         if not self.is_possessed:
             self.aiBehaviors.wander()
+            return
+
+        # wait for attack to finish
+        if self.state == 'attack':
             return
 
         distance_to_player = (
