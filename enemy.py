@@ -52,15 +52,15 @@ class Vessel:
         self.vessel_model.loop('walk')
 
         self.possessed_model = Actor(
-            'possessed/possessed.bam',
+            'models/possessed.bam',
             {
-                'spawn': 'possessed/possessed_spawn.bam',
-                'run': 'possessed/possessed_run.bam',
-                'slash1': 'possessed/possessed_slash1.bam',
-                'slash2': 'possessed/possessed_slash2.bam',
-                'stab': 'possessed/possessed_stab.bam',
-                'deflected': 'possessed/possessed_deflected.bam',
-                'death': 'possessed/possessed_death.bam',
+                'spawn': 'models/possessed_spawn.bam',
+                'run': 'models/possessed_run.bam',
+                'slash1': 'models/possessed_slash1.bam',
+                'slash2': 'models/possessed_slash2.bam',
+                'stab': 'models/possessed_stab.bam',
+                'deflected': 'models/possessed_deflected.bam',
+                'death': 'models/possessed_death.bam',
             },
         )
         self.possessed_model.setHpr(180, 0, 0)
@@ -123,12 +123,10 @@ class Vessel:
         return (player_pos - vessel_pos).length() <= distance
 
     def pursue_player(self, task=None):
-        self.state = 'pursue'
         self.aiBehaviors.pursue(self.player)
         if self.possessed_model.getCurrentAnim() == 'run':
             return
         self.possessed_model.loop('run')
-        self.taskMgr.add(self.update, f'{self.name}_update')
 
     def attack(self, task=None):
         attack = random.choice(list(self.attack_methods.keys()))
@@ -178,15 +176,8 @@ class Vessel:
             self.aiBehaviors.wander()
             return
 
-        # finish attacks before moving on
-        if (
-            self.state == 'attack'
-            or self.possessed_model.getCurrentAnim() == 'slash2'
-        ):
-            return
-
         distance_to_player = (
-            self.body.getPos() - self.player.getPos()
+            self.body.getPos(render) - self.player.getPos(render)
         ).length()
 
         if distance_to_player > 5:

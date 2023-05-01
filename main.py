@@ -1,26 +1,23 @@
 # from pandac.PandaModules import loadPrcFileData
 # loadPrcFileData('', 'load-display tinydisplay')
 
-import logging
+from direct import showbase
+from direct.showbase.ShowBase import ShowBase
+from pandac.PandaModules import loadPrcFileData
+
+loadPrcFileData('', 'win-size 1280 768')
+loadPrcFileData('', 'sync-video t')
+import math
+import random
 import sys
+import time
 from typing import List
 
 import direct.directbase.DirectStart
-import gltf
-import simplepbr
-# loadPrcFileData('', 'bullet-additional-damping true')
-# loadPrcFileData('', 'bullet-additional-damping-linear-factor 0.005')
-# loadPrcFileData('', 'bullet-additional-damping-angular-factor 0.01')
-# loadPrcFileData('', 'bullet-additional-damping-linear-threshold 0.01')
-# loadPrcFileData('', 'bullet-additional-damping-angular-threshold 0.01')
 from direct.actor.Actor import Actor
-from direct.gui.DirectGui import DGG, DirectButton, DirectFrame
-from direct.gui.OnscreenImage import OnscreenImage
-from direct.gui.OnscreenText import OnscreenText, TextNode
 from direct.interval.ActorInterval import ActorInterval, LerpAnimInterval
 from direct.interval.IntervalGlobal import Func, Parallel, Sequence, Wait
 from direct.interval.LerpInterval import *
-from direct.interval.LerpInterval import LerpFunc
 from direct.showbase.DirectObject import DirectObject
 from direct.showbase.InputStateGlobal import inputState
 from panda3d.ai import AIWorld
@@ -28,39 +25,69 @@ from panda3d.bullet import *
 from panda3d.core import *
 
 from enemy import Vessel
+from mouseLook import MouseLook
 from spirit import Spirit
+
+base.disableMouse()
+
+ml = MouseLook()
+ml.setMouseModeRelative(True)
+ml.setCursorHidden(True)
+ml.centerMouse = True
+ml.mouseLookMode = ml.MLMOrbit
+ml.disable()
+
+# props = WindowProperties()
+# props.setCursorHidden(True)
+# props.setMouseMode(WindowProperties.M_relative)
+# base.win.requestProperties(props)
+
+# To revert to normal mode:
+
+
+# ~ base.accept("mouse2", ml.enable)
+# ~ base.accept("mouse2-up", ml.disable)
+base.accept('wheel_up', ml.moveCamera, extraArgs=[Vec3(0, 1, 0)])
+base.accept('wheel_down', ml.moveCamera, extraArgs=[Vec3(0, -1, 0)])
+
+base.cam.node().getLens().setFov(70.0)
+
+globalClock.setMode(globalClock.MLimited)
+globalClock.setFrameRate(120.0)
+
+import simplepbr
+
+from kcc import PandaBulletCharacterController
 
 
 class Game(DirectObject):
     def __init__(self):
+
+        # now, x and y can be considered relative movements
+        pipeline = simplepbr.init()
+        pipeline.use_normal_maps = True
+        pipeline.use_occlusion_maps = True
+
         base.setBackgroundColor(0.1, 0.1, 0.8, 1)
         base.setFrameRateMeter(True)
 
-        base.cam.setPos(0, -20, 4)
+        base.cam.setPos(0, -20, 10)
         base.cam.lookAt(0, 0, 0)
 
-        # Light
-        alight = AmbientLight('ambientLight')
-        alight.setColor(Vec4(0.5, 0.5, 0.5, 1))
-        alightNP = render.attachNewNode(alight)
+        ml.resolveMouse()
 
-        dlight = DirectionalLight('directionalLight')
-        dlight.setDirection(Vec3(1, 1, -1))
-        dlight.setColor(Vec4(0.7, 0.7, 0.7, 1))
-        dlightNP = render.attachNewNode(dlight)
-
-        render.clearLight()
-        render.setLight(alightNP)
-        render.setLight(dlightNP)
-        self.setup()
         # Input
         self.accept('escape', self.doExit)
-        self.accept('r', self.doReset)
-        self.accept('f1', self.toggleWireframe)
-        self.accept('f2', self.toggleTexture)
-        self.accept('f3', self.toggleDebug)
-        self.accept('f5', self.doScreenshot)
-        self.accept('t', self.doSwipe, extraArgs=[self.scanPoints[0]])
+        self.accept('space', self.doJump)
+        self.accept('shift', self.doDodge)
+        self.currentStrike = 0
+        self.accept('mouse1', self.doAttack)
+        self.accept('mouse3', self.doPrayer)  # , [self.currentStrike])
+        # self.accept('c', self.doCrouch)
+        # self.accept('c-up', self.stopCrouch)
+
+        self.accept('control', self.startFly)
+        self.accept('control-up', self.stopFly)
 
         inputState.watchWithModifiers('forward', 'w')
         inputState.watchWithModifiers('left', 'a')
@@ -69,273 +96,517 @@ class Game(DirectObject):
         inputState.watchWithModifiers('turnLeft', 'q')
         inputState.watchWithModifiers('turnRight', 'e')
 
+        # inputState.watchWithModifiers('run', 'shift')
+
+        inputState.watchWithModifiers('flyUp', 'r')
+        inputState.watchWithModifiers('flyDown', 'f')
+
         # Task
         taskMgr.add(self.update, 'updateWorld')
-        self.swiping = False
+
         # Physics
+        self.setup()
 
-        self.camPos = self.camTarg.getPos(render)
+        self.atx = None   # keeping track of attacks for combo
 
-    def doSwipe(self, swipepoint, entry):
-        # puts
-        self.swiping = True
-        self.boxNP.node().setLinearVelocity((0, 0, 0))
-        # h =
-        # p = LerpPosHprInterval(self.playerM, .01, )
-        p = LerpPosInterval(self.boxNP, 0.2, (0, 3, 1), other=swipepoint)
-        a = self.playerM.actorInterval('swipe', 0, startFrame=0, endFrame=40)
-        self.credit += 1
-
-        def end():
-            self.swiping = False
-
-        f = Func(end)
-        seq = Sequence(p, a, f).start()
-
-    # _____HANDLER_____
+        # _____HANDLER_____
 
     def doExit(self):
         self.cleanup()
         sys.exit(1)
 
-    def doReset(self):
-        self.cleanup()
-        self.setup()
-
-    def toggleWireframe(self):
-        base.toggleWireframe()
-
-    def toggleTexture(self):
-        base.toggleTexture()
-
-    def toggleDebug(self):
-        if self.debugNP.isHidden():
-            self.debugNP.show()
-        else:
-            self.debugNP.hide()
-
-    def doScreenshot(self):
-        base.screenshot('Bullet')
-
-    # ____TASK___
-
-    def processInput(self, dt, fo):
-        force = Vec3(0, 0, 0)
-        torque = Vec3(0, 0, 0)
-
-        if inputState.isSet('forward'):
-            force.setY(1.0)
-        if inputState.isSet('reverse'):
-            force.setY(-1.0)
-        if inputState.isSet('left'):
-            force.setX(-1.0), torque.setZ(0.05)
-        if inputState.isSet('right'):
-            force.setX(1.0), torque.setZ(-0.05)
-        if inputState.isSet('turnLeft'):
-            torque.setZ(0.5)
-        if inputState.isSet('turnRight'):
-            torque.setZ(-0.5)
-
-        # force increases with credit score
-        force *= fo
-        torque *= 2.0
-
-        force = render.getRelativeVector(self.playerM, force)
-        torque = render.getRelativeVector(self.playerM, torque)
-
-        self.boxNP.node().setActive(True)
-        self.boxNP.node().applyCentralForce(force)
-        self.boxNP.node().applyTorque(torque)
-
     def doJump(self):
 
-        pass
+        if self.character.movePoints <= 0:
+            print('out of mp')
+            return
+        if self.isAttacking == True:
+
+            return
+        if (
+            self.character.movementState == 'attacking'
+            and self.isAttacking == False
+        ):
+            self.finishAction()
+
+        self.character.movePoints -= 1
+        # self.character.currentAction = 'jump'
+        # print('speed',self.speed,'airdir', self.character.airDir)
+        # if self.speed != Vec3(0, 0, 0):
+        self.character.airDir = self.speed
+        # else:
+        #     self.character.airDir = self.playerM.getQuat().getForward() * 5
+        # print('angle',self.angle)
+        if self.speed != Vec3(0, 0, 0):
+            self.playerM.setH(self.angle)
+        self.speed = 0
+        self.character.startJump(3)
+        print('jump')
+
+        # print(self.angle)
+
+        self.character.currentAction = None
+
+    def doDodge(self):
+
+        if self.character.movePoints <= 0:
+            print('out of mp')
+            return
+        if self.isAttacking == True:
+            return
+        if (
+            self.character.movementState == 'attacking'
+            and self.isAttacking == False
+        ):
+            self.finishAction()
+        if self.character.movementState in self.character.airStates:
+            self.character.movePoints -= 1
+        if self.speed != Vec3(0, 0, 0):
+            self.playerM.setH(self.angle)
+        self.character.dodgedir = self.playerM.getQuat().getForward() * 15
+        self.speed = 0
+        self.character.movementState = 'dodging'
+
+        self.animSeq = Sequence()
+
+    def doCrouch(self):
+        self.character.startCrouch()
+
+    def doAttack(self):
+        print('attack no', self.currentStrike)
+        if self.character.movementState in self.character.airStates:
+            return
+        # if self.currentStrike>=3:
+        #     self.currentStrike =  1
+        #     print('combo limit')
+        # return
+        # if self.character.movementState == 'attacking':
+        if self.isAttacking == True:
+            print('already attacking')
+            if self.currentStrike > 1:
+                self.attackQueued = True
+
+            return
+        if self.character.movementState == 'attacking':
+            if self.animSeq != None:
+                self.animSeq.pause()
+                self.animSeq = None
+            # else:
+
+        if self.speed != Vec3(0, 0, 0):
+            self.playerM.setH(self.angle)
+        print('attacl no', self.currentStrike)
+        self.character.atkDir = self.playerM.getQuat().getForward()
+        # self.speed = 0
+        self.isAttacking = True
+        self.character.movementState = 'attacking'
+        if self.currentStrike == 1:
+            self.atkAnim('strike1', 4, 20)
+            self.currentStrike += 1
+            return
+        if self.currentStrike == 2:
+            self.atkAnim('strike2', 4, 20)
+            self.currentStrike += 1
+            return
+        if self.currentStrike == 3:
+            self.atkAnim('strike3', 4, 20)
+            self.currentStrike += 1
+            #     return
+        # if self.currentStrike==2:
+
+    def doPrayer(self):
+        if self.isAttacking == True:
+            print('already attacking')
+
+            return
+
+        if self.character.movementState == 'attacking':
+            if self.animSeq != None:
+                self.animSeq.pause()
+                self.animSeq = None
+        if self.character.movementState == 'attacking':
+            if self.animSeq != None:
+                self.animSeq.pause()
+                self.animSeq = None
+        if self.speed != Vec3(0, 0, 0):
+            self.playerM.setH(self.angle)
+        self.isAttacking = True
+        self.character.movementState = 'attacking'
+        self.character.atkDir = 0
+        no = random.randint(1, 2)
+        self.atkAnim(
+            f'prayer{no}',
+            4,
+            16,
+        )
+        #     self.atkAnim('strike2', 4,8)
+        #     self.currentStrike +=1
+        #     return
+        # if self.currentStrike==3:
+        #     #  self.finishAction()
+        #     #  self.isAttacking = True
+        # #     self.character.movementState='attacking'
+        #     self.atkAnim('strike2', 14,18)
+        #     self.currentStrike +=1
+        #     return
+
+        #     def doSlashatk(self):
+        # if self.atx!=None and len(self.atx) >=4:
+        #     print('combo limit')
+        #     return
+
+        # # if self.character.movementState == 'dodging':
+
+        # # if self.character.movementState in self.character.airstates:# also if air attacking
+        #     # print('air attack x')
+        #     # self.smashAttack()
+        # if self.character.isAttacking == True and self.attackqueue>0:
+
+        #     # if self.attackQueued==True:
+        #     #     print('attack already queued')
+        #     if self.attackQueued ==False:
+        #         # print('queue attack x- do slash # ', self.attackqueue+1)
+        #         self.qdatk = 'slash'
+        #         self.attackQueued=True
+        # else:
+        #     # print('shouldnt get here if ur dodging....')
+        #     self.slashAttack()
+
+    # def queueStage(self,x, qud):
+    #     self.attackqueue = x
+    #     self.attackQueued = qud
+    #     # if qud==True:
+    #     #     self.attached = False
+    def check4Queue(self):
+        """if there is a queued attack, this will trigger it"""
+        if self.character.movementState != 'attacking':
+            self.character.movementState = 'attacking'
+        if (
+            self.attackQueued == True
+        ):   # or self.character.movementState == 'dodging':
+
+            # self.finish()
+            # if type == 'slash':
+            if self.currentStrike == 2:
+                self.atkAnim('strike2', 4, 20)
+                self.isAttacking = True
+                self.currentStrike += 1
+                self.attackQueued = False
+                return
+            if self.currentStrike == 3:
+                self.atkAnim('strike3', 4, 20)
+                self.isAttacking = True
+                self.currentStrike += 1
+                self.attackQueued = False
+        else:
+            return
+
+    # def atkAnim(self,order,)
+    def atkAnim(self, anim, activeFrame, bufferFrame):
+
+        if self.animSeq is not None:  # end attack anim sequence
+            if self.animSeq.isPlaying():
+                self.animSeq.pause()
+
+        def atkFalse():
+            self.isAttacking = False
+
+        a1 = self.playerM.actorInterval(
+            anim, startFrame=0, endFrame=activeFrame
+        )
+        active = self.playerM.actorInterval(
+            anim, startFrame=activeFrame + 1, endFrame=bufferFrame
+        )
+        buffer = self.playerM.actorInterval(
+            anim, startFrame=bufferFrame + 1, endFrame=30
+        )
+
+        atkF = Func(atkFalse)
+        fin = Func(self.finishAction)
+        c4q = Func(self.check4Queue)
+
+        self.animSeq = Sequence(a1, active, atkF, c4q, buffer, fin)
+        self.animSeq.start()
+
+    # def prayerAnim(self,anim):
+    #     if self.animSeq is not None:#end attack anim sequence
+    #             if self.animSeq.isPlaying():
+    #                     self.animSeq.pause()
+
+    #     a1 =self.playerM.actorInterval(anim,startFrame=0,endFrame = activeFrame)
+    #     active = self.playerM.actorInterval(anim,startFrame=activeFrame+1,endFrame = bufferFrame)
+    #     buffer = self.playerM.actorInterval(anim,startFrame=bufferFrame+1, endFrame=30)
+
+    #     atkF = Func(atkFalse)
+    #     fin = Func(self.finishAction)
+    # # def attach(self,bone):
+
+    #     if self.attached == False: #and self.hitcontact==False:
+    #         # if self.character.state == "OF":
+
+    #         self.hb(parent=bone, node = self.atkNode, shape=CollisionCapsule(0, .5, 0, 0, 0, 0, .5))
+    #  if self.character.state == "mech":
+    #  self.hb(parent=self.bladeL, node = self.atkNode, shape=CollisionCapsule(0, .5, 0, 0, 2, 0, 1))
+    #  self.hb(parent=self.bladeR, node = self.atkNode, shape=CollisionCapsule(0, .5, 0, 0, 2, 0, 1))
+    def hb(self, parent, node, shape, pos=(0, 0, 0), visible=True):
+        """player hitboxes for attacks/parries"""
+        # self.character.movementState = "attacking"
+
+        ##
+        # print(self.speed)
+        # self.footR = self.charM.expose_joint(None, 'modelRoot', 'foot.R')
+        # self.footL = self.charM.expose_joint(None, 'modelRoot', 'foot.L')
+        HitB = CollisionCapsule(0, 0.5, 0, 0, 0, 0, 0.5)
+        # self.footHB = self.foot.attachNewNode(CollisionNode('rightfoot'))
+        node.reparentTo(parent)
+        node.node().addSolid(shape)
+        # node.setZ(-.2)
+        node.setPos(pos)
+
+        self.attached = True
+        if visible == True:
+            node.show()
+        # self.speed /= 6
+        # self.footHB.instanceTo(self.footL)
+
+        # shape = BulletCapsuleShape(.5, 1)
+        # self.rightfootHB.reparentTo(self.foot)
+        # self.rightfootHB.setP(90)
+        # self.rightfootHB.node().addShape(shape)
+        # self.world.attachGhost(self.rightfootHB.node())
+
+    def finishAction(self):
+        self.atkQueue = None
+        self.character.movementState = 'endaction'
+        if self.animSeq != None:
+            self.animSeq.pause()
+            self.animSeq = None
+        self.attackQueued = False
+
+    #  self.currentStrike =1
+    def stopCrouch(self):
+        self.character.stopCrouch()
+
+    def startFly(self):
+        self.character.startFly()
+
+    def stopFly(self):
+        self.character.stopFly()
+
+    def processInput(self, dt):
+        self.speed = Vec3(0, 0, 0)
+        omega = 0.0
+
+        v = 5.0
+
+        # if inputState.isSet('run'): v = 15.0
+
+        if inputState.isSet('forward'):
+            self.speed.setY(v)
+        if inputState.isSet('reverse'):
+            self.speed.setY(-v)
+        if inputState.isSet('left'):
+            self.speed.setX(-v)
+        if inputState.isSet('right'):
+            self.speed.setX(v)
+
+        if inputState.isSet('flyUp'):
+            self.speed.setZ(2.0)
+        if inputState.isSet('flyDown'):
+            self.speed.setZ(-2.0)
+
+        if inputState.isSet('turnLeft'):
+            omega = 120.0
+        if inputState.isSet('turnRight'):
+            omega = -120.0
+
+        if (
+            self.character.movementState in self.character.airStates
+            or self.character.movementState in self.character.actionStates
+        ):
+            if (
+                self.speed != 0
+                and self.character.movementState == 'attacking'
+                and self.isAttacking == False
+            ):
+                self.finishAction()
+            # self.airDir= self.speed
+            # self.speed.x /= 2
+            # self.speed.y /=2
+            # print('no inpuit')
+            return
+
+        self.character.setAngularMovement(omega)
+        self.character.setLinearMovement(self.speed, True)
+
+        # self.playerAngle = math.atan2(-self.speed.x, self.speed.y)
 
     def update(self, task):
         dt = globalClock.getDt()
 
-        f = self.credit * 2
-        if self.swiping == False:
-            self.processInput(dt, f)
-        # self.world.doPhysics(dt)
-        # self.boxNP.setP(0)
-        # self.boxNP.setR(0)
-        self.world.doPhysics(dt, 5, 1.0 / 180.0)
+        self.processInput(dt)
 
-        self.camdelay(2)
-        self.timer -= 0.016
-        self.text.setText(f'Time:{self.timer}\nCredit Score: {self.credit}')
+        # print('is attacking?', self.isAttacking)
+
+        oldCharPos = self.character.getPos(render)
+        self.character.setH(base.camera.getH(render))
+        self.character.update()   # WIP
+        newCharPos = self.character.getPos(render)
+        delta = newCharPos - oldCharPos
+
+        self.world.doPhysics(dt, 4, 1.0 / 120.0)
+
+        char2cam = self.character.getY(base.cam)
+        # print('char dist to cam:', char2cam)
+        base.camera.setY(self.character.getY())
+        # ml.orbitCenter = self.character.getPos(render)
+        # base.camera.setPos(base.camera.getPos(render) + delta)
         self.updatePlayer()
-        # base.cam.setPos(self.camTarg.getPos())
-
+        if self.character.movementState != 'attacking':
+            self.currentStrike = 1
+            # print('state attacking', self.isAttacking, self.currentStrike)
         # update enemy ai
         self.updateAi()
         self.updateSpirit()
 
         return task.cont
 
-    def updateSpirit(self):
-        if self.spirit.state == 'float':
-            self.spirit.floatUp()
-        elif self.spirit.state == 'oscillate':
-            self.spirit.oscillate()
-        elif self.spirit.state == 'decide':
-            self.spirit.decideTarget(self.playerM)
-        elif self.spirit.state == 'move':
-            self.spirit.takeAction()
-
-    def updatePlayer(self):
-        self.MP.setPos(self.boxNP.getPos(render))
-        self.playerM.setPos(self.boxNP.getPos(render))
-        self.playerM.setH(self.MP, self.charAngle)
-        if inputState.isSet('left'):
-            self.charAngle += 1
-        if inputState.isSet('right'):
-            self.charAngle -= 1
-
-        ### anims here
-        # print('char velocity', self.boxNP.node().getLinearVelocity().z)
-
-        if abs(self.boxNP.node().getLinearVelocity().y) > 0.3:
-            walking = True
-        else:
-            walking = False
-
-        self.anim = self.playerM.getCurrentAnim()
-
-        def animRun(speed):
-            self.playerM.setPlayRate(speed, 'run')
-            if self.anim != 'run':
-                self.playerM.loop('run')
-
-        def animIdle():
-            if self.anim != 'idle':
-                self.playerM.loop('idle')
-
-        if self.swiping == True:
-            return
-        if walking == True:
-            animRun(1)
-        if walking == False:
-            animIdle()
-
-        # self.playerM
-
-    def updateAi(self):
-        self.aiWorld.update()
-        for vessel in self.vessels:
-            vessel.update()
-
-    def camdelay(self, t):
-
-        self.camPos += (
-            self.boxNP.getPos(render) - self.camTarg.getPos(render)
-        ) * t
-        # self.camTarg.setPos(self.camPos)
-        self.camTarg.setPos(self.playerM.getPos(render))
-        self.camTarg.setH(self.playerM.getH(render))
-
     def cleanup(self):
-        self.world.removeRigidBody(self.groundNP.node())
-        self.world.removeRigidBody(self.boxNP.node())
         self.world = None
-
-        self.debugNP = None
-        self.groundNP = None
-        self.boxNP = None
-
         self.worldNP.removeNode()
 
     def setup(self):
         self.worldNP = render.attachNewNode('World')
 
-        self.timer = 0
-        self.credit = 10
-        self.text = TextNode('text')
-        self.textNP = aspect2d.attachNewNode(self.text)
-        self.textNP.setScale(0.08)
-        self.textNP.setPos(-0.9, 0, -0.6)
-
         # World
         self.debugNP = self.worldNP.attachNewNode(BulletDebugNode('Debug'))
         self.debugNP.show()
-        self.debugNP.node().showWireframe(True)
-        self.debugNP.node().showConstraints(True)
-        self.debugNP.node().showBoundingBoxes(False)
-        self.debugNP.node().showNormals(True)
-
-        # self.debugNP.showTightBounds()
-        # self.debugNP.showBounds()
-        self.camTarg = self.worldNP.attachNewNode('cam target')
-        base.cam.reparentTo(self.camTarg)
-        base.cam.setPos(0, -10, 3)
 
         self.world = BulletWorld()
         self.world.setGravity(Vec3(0, 0, -9.81))
         self.world.setDebugNode(self.debugNP.node())
 
-        # Ground (static)
-        shape = BulletPlaneShape(Vec3(0, 0, 1), 1)
+        # Ground
+        shape = BulletPlaneShape(Vec3(0, 0, 1.0), 0)
 
-        self.groundNP = self.worldNP.attachNewNode(
-            BulletRigidBodyNode('Ground')
-        )
-        self.groundNP.node().addShape(shape)
-        self.groundNP.setPos(0, 0, -50)
-        self.groundNP.setCollideMask(BitMask32.allOn())
+        np = self.worldNP.attachNewNode(BulletRigidBodyNode('Ground'))
+        np.node().addShape(shape)
+        np.setPos(0, 0, 0)
+        np.setCollideMask(BitMask32.allOn())
 
-        self.world.attachRigidBody(self.groundNP.node())
+        cm = CardMaker('ground')
+        cm.setFrame(-20, 20, -20, 20)
+        gfx = render.attachNewNode(cm.generate())
+        gfx.setP(-90)
+        gfx.setZ(-0.01)
+        gfx.setColorScale(Vec4(0.4))
+
+        self.world.attachRigidBody(np.node())
+
+        spirit = loader.loadModel('spirit.bam')
+        spirit.reparentTo(render)
+
+        self.attackQueued = False
+        self.attached = False
 
         # player setup
+        self.character = PandaBulletCharacterController(
+            self.world, self.worldNP, 1.75, 1.3, 0.5, 0.4
+        )
+        self.character.setPos(render, Point3(0, 0, 0.5))
         self.playerM = Actor(
-            'char.bam',
+            'models/player/player.bam',
             {
-                'idle': 'char_IDLE.bam',
-                'run': 'char_RUN.bam',
-                'jump': 'char_jump.bam',
-                'swipe': 'char_swipe.bam',
+                'walk': 'models/player/player_walking.bam',
+                'idle': 'models/player/player_idle.bam',
+                'jump': 'models/player/player_JUMP.bam',
+                'fall': 'models/player/player_FALL.bam',
+                'land': 'models/player/player_land.bam',
+                'dodge': 'models/player/player_dodge.bam',
+                'strike1': 'models/player/player_strike1.bam',
+                'strike2': 'models/player/player_strike2.bam',
+                'strike3': 'models/player/player_strike3.bam',
+                'prayer1': 'models/player/player_pray1.bam',
+                'prayer2': 'models/player/player_pray2.bam',
             },
         )
-        self.playerM.reparentTo(self.worldNP)
-        self.playerM.setZ(-1)
-        self.MP = render.attachNewNode('movementparent')
-        shape = BulletSphereShape(1)
-        self.charAngle = 0
-        # shape = BulletCapsuleShape(1,1.5)
+        self.playerM.reparentTo(self.character.movementParent)
+        self.playerIdle = True
+
+        self.isAttacking = False   # when this is false, dodges, movement, jumps end attack, asttacking
+        self.angle = 0
+        self.playerAngle = 0
+        self.animSeq = None
+        self.currentStrike = 1
+
+        X = 0.3
+        Y = 4.0
+        Z = 1.5
+
+        stepsY = 1.5
+
+        # shapesData = [
+        #     dict(name = 'wall0', size = Vec3(X, Y, Z), pos = Point3(Y*2.0, -(Y + stepsY), Z), hpr = Vec3()),
+        #     dict(name = 'wall1', size = Vec3(X, Y, Z), pos = Point3(Y*2.0, (Y + stepsY), Z), hpr = Vec3()),
+
+        #     dict(name = 'wall4', size = Vec3(X, Y, Z), pos = Point3(Y, (Y*2.0 + stepsY - X), Z), hpr = Vec3(90, 0, 0)),
+        #     dict(name = 'wall5', size = Vec3(X, Y, Z), pos = Point3(-Y, (Y*2.0 + stepsY - X), Z), hpr = Vec3(90, 0, 0)),
+        #     dict(name = 'wall6', size = Vec3(X, Y, Z), pos = Point3(Y, -(Y*2.0 + stepsY - X), Z), hpr = Vec3(90, 0, 0)),
+        #     dict(name = 'wall7', size = Vec3(X, Y, Z), pos = Point3(-Y, -(Y*2.0 + stepsY - X), Z), hpr = Vec3(90, 0, 0)),
+
+        #     dict(name = 'ceiling', size = Vec3(Y, Y*2.0, X), pos = Point3(0, -(Y + stepsY - X), Z), hpr = Vec3(90, 0, 0)),
+        #     dict(name = 'ceiling', size = Vec3(Y, Z, X), pos = Point3(-Z, (Y + stepsY - X), Z*2.0-X), hpr = Vec3(90, 0, 0)),
+        #     dict(name = 'ceiling', size = Vec3(Y, Z, X), pos = Point3(Z, (Y + stepsY - X), Z*4.0-X), hpr = Vec3(90, 0, 0)),
+
+        #     # CHANGE ROTATION TO TEST DIFFERENT SLOPES
+        #     dict(name = 'slope', size = Vec3(20, stepsY+Y*2.0, X), pos = Point3(-Y*2.0, 0, 0), hpr = Vec3(0, 0, 50)),
+        # ]
+
+        # for i in range(10):
+        #     s = Vec3(0.4, stepsY, 0.2)
+        #     p = Point3(Y*2.0 + i * s.x * 2.0, 0, s.z + i * s.z * 2.0)
+        #     data = dict(name = 'Yall', size = s, pos = p, hpr = Vec3())
+        #     shapesData.append(data)
+
+        # for data in shapesData:
+        #     shape = BulletBoxShape(data['size'])
+
+        #     np = self.worldNP.attachNewNode(BulletRigidBodyNode(data['name']))
+        #     np.node().addShape(shape)
+        #     np.setPos(data['pos'])
+        #     np.setHpr(data['hpr'])
+        #     np.setCollideMask(BitMask32.allOn())
+
+        #     self.world.attachRigidBody(np.node())
+
+        # shape = BulletSphereShape(0.5)
+        # np = self.worldNP.attachNewNode(BulletRigidBodyNode('Ball'))
+        # np.node().addShape(shape)
+        # np.node().setMass(10.0)
+        # np.setPos(13.0, 0, 5.0)
+        # np.setCollideMask(BitMask32.allOn())
+        # self.world.attachRigidBody(np.node())
+
+        # shape = BulletBoxShape(Vec3(0.5))
+        # np = self.worldNP.attachNewNode(BulletRigidBodyNode('Crate'))
+        # np.node().addShape(shape)
+        # np.node().setMass(10.0)
+        # np.setPos(-13.0, 0, 10.0)
+        # np.setCollideMask(BitMask32.allOn())
+        # self.world.attachRigidBody(np.node())
+
+        # shape = BulletBoxShape(Vec3(1, 1, 2.5))
+        # self.ghost = self.worldNP.attachNewNode(BulletGhostNode('Ghost'))
+        # self.ghost.node().addShape(shape)
+        # self.ghost.setPos(-5.0, 0, 3)
+        # self.ghost.setCollideMask(BitMask32.allOn())
+        # self.world.attachGhost(self.ghost.node())
+
+        # taskMgr.add(self.checkGhost, 'checkGhost')
 
         # enemy setup
+        # spawn spirit
         self.spirit = Spirit(self.world, self.worldNP, self.playerM)
-
-        self.boxNP = self.worldNP.attachNewNode(BulletRigidBodyNode('Box'))
-        self.boxNP.node().setMass(1.0)
-        self.boxNP.node().addShape(shape)
-        self.boxNP.setPos(0, 0, 5)
-        # self.boxNP.setScale(2, 1, 0.5)
-        self.boxNP.setCollideMask(BitMask32.allOn())
-        # self.boxNP.node().setDeactivationEnabled(False)
-
-        self.world.attachRigidBody(self.boxNP.node())
-
-        visualNP = loader.loadModel('models/box.egg')
-        visualNP.clearModelNodes()
-        visualNP.reparentTo(self.boxNP)
-
-        # lvl setup
-        self.lvl = loader.loadModel('lvl.glb')
-        self.lvl.reparentTo(self.worldNP)
-        self.geomcount = 6
-
-        self.scanPoints = []
-        for x in range(4):
-            u = self.lvl.find(f'p{x}')
-            self.scanPoints.append(u)
-
-        for i in range(self.geomcount):
-            self.findTris(f'tri{i}', self.lvl)
-
-        self.collisionSetup()
-
-        # enemy setup
         # ai
         self.aiWorld = AIWorld(self.worldNP)
         # spawn vessels
@@ -353,93 +624,133 @@ class Game(DirectObject):
                 )
             )
 
-    def make_collision_from_model(
-        self,
-        input_model,
-        node_number,
-        mass,
-        world,
-        target_pos,
-        mask=BitMask32.bit(0),
-        name='input_model_tri_mesh',
-    ):
-        # tristrip generation from static models
-        # generic tri-strip collision generator begins
-        geom_nodes = input_model.find_all_matches('**/+GeomNode')
-        geom_nodes = geom_nodes.get_path(node_number).node()
-        # print(geom_nodes)
-        geom_target = geom_nodes.get_geom(0)
-        # print(geom_target)
-        output_bullet_mesh = BulletTriangleMesh()
-        output_bullet_mesh.add_geom(geom_target)
-        tri_shape = BulletTriangleMeshShape(output_bullet_mesh, dynamic=False)
-        print(output_bullet_mesh)
+    def lvlSetup(self):
+        self.lvl = self.worldNP.attachNewNode('lvl')
 
-        body = BulletRigidBodyNode(name)
-        np = render.attach_new_node(body)
-        np.node().add_shape(tri_shape)
-        np.node().set_mass(mass)
-        np.node().set_friction(0.01)
-        np.set_pos(target_pos)
-        np.set_scale(1)
-        # np.set_h(180)
-        # np.set_p(180)
-        # np.set_r(180)
-        # np.set_collide_mask(BitMask32.allOn())
-        np.set_collide_mask(mask)
+    def updatePlayer(self):
+        # if self.character.currentAction!=None:
+        #     return
+        # print('anf',self.angle)
+        # print('mvtstate', self.character.movementState)
+        # currentAnim= self.playerM.getCurrentAnim()
+        # if self.character.movementState in self.character.airStates:
+        #     self.character.movementState == "jumping":
+        #         if(currentAnim)!="jump":
+        # print(self.character.movementState)
 
-        world.attach_rigid_body(np.node())
+        # set angle here
+        self.angle = (
+            math.degrees(math.atan2(-self.speed.x, self.speed.y))
+        ) % 360
+        # self.angle = self.angle % 360
+        h = self.playerM.getH() % 360
 
-    def findTris(self, name, model):
-        shape = model.find(name)
-        self.make_collision_from_model(shape, 0, 0, self.world, shape.getPos())
+        def interAngle(angle):
+            # interpolates player angle
+            self.angle = math.degrees(angle)
+            self.angle = self.angle % 360
+            h = self.playerM.getH() % 360
+
+            # print(self.playerAngle,abs(self.playerAngle-self.angle))
+            if abs(self.playerAngle - self.angle) < 11:
+                return
+            if self.angle > h:
+                self.playerAngle += 20
+            if self.angle < h:
+                self.playerAngle -= 20
+
+        def rotate_character(current_angle, new_angle):
+            if abs(new_angle - current_angle) > 180:
+                if new_angle < current_angle:
+                    new_angle += 360
+                else:
+                    current_angle += 360
+
+            clockwise = new_angle > current_angle
+            diff = abs(new_angle - current_angle) % 360
+            # print('diff', diff)
+            if diff < 10:
+                return current_angle
+            if clockwise:
+                current_angle += 10
+            else:
+                current_angle -= 10
+
+            current_angle %= 360
+
+            return current_angle
+
+        if self.speed != Vec3(0, 0, 0):
+            # interAngle(math.atan2(-self.speed.x, self.speed.y))
+            if self.character.isOnGround():
+                if self.character.movementState in self.character.actionStates:
+                    pass
+                else:
+                    self.playerM.setH(rotate_character(h, self.angle))
+
+        # anims here
+        currentAnim = self.playerM.getCurrentAnim()
+        anim = None
+        if self.animSeq != None:
+            if self.animSeq.isPlaying():
+                return
+
+        if self.character.movementState == 'dodging':
+            anim = 'dodge'
+            self.character.dodgeFrame = self.playerM.getCurrentFrame()
+        if self.character.movementState in self.character.airStates:
+            if self.character.movementState == 'jumping':
+                # if(currentAnim)!="jump":
+                anim = 'jump'
+            if self.character.movementState == 'falling':
+                anim = 'fall'
+        if (
+            self.character.isOnGround()
+            and self.character.movementState != 'dodging'
+        ):
+            if self.speed != 0:
+                anim = 'walk'
+            else:
+                anim = 'idle'
+        if currentAnim != anim:
+            self.playerM.setPlayRate(1, anim)
+            self.playerM.play(anim)
+            # print('anim = ', anim, self.playerM.getCurrentAnim)
+        # else:
+        #     return
+        # else:
+
+    def updateSpirit(self):
+        if self.spirit.state == 'float':
+            self.spirit.floatUp()
+        elif self.spirit.state == 'oscillate':
+            self.spirit.oscillate()
+        elif self.spirit.state == 'decide':
+            self.spirit.decideTarget(self.playerM)
+        elif self.spirit.state == 'move':
+            self.spirit.takeAction()
+
+    def updateAi(self):
+        self.aiWorld.update()
+        for vessel in self.vessels:
+            vessel.update()
 
     def collisionSetup(self):
         traverser = CollisionTraverser('collider')
         base.cTrav = traverser
 
-        self.collHandEvent = CollisionHandlerEvent()
-        self.collHandEvent.addInPattern('%fn-into-%in')
+    def checkGhost(self, task):
+        pass
+        # ghost = self.ghost.node()
+        # for node in ghost.getOverlappingNodes():
+        #     print ("Ghost collides with", node)
+        # return task.cont
 
-        self.charTrigger = self.playerM.attachNewNode(CollisionNode('player'))
-        sphere = CollisionSphere(0, 0, 0, 1.5)
-        self.charTrigger.node().addSolid(sphere)
-        self.charTrigger.show()
-        traverser.addCollider(self.charTrigger, self.collHandEvent)
+    # def updatePlayer(self):
 
-        self.scanPoints = []
-        for x in range(4):
-            u = self.lvl.find(f'p{x}')
-            self.scanPoints.append(u)
-            collider = u.attachNewNode(CollisionNode(f'sensor{x}'))
-            collider.node().addSolid(sphere)
-            collider.show()
+    #     else:
 
-            traverser.addCollider(collider, self.collHandEvent)
-
-        # self.findoppa=self.playerNP.attachNewNode(CollisionNode('sensor'))
-        # sphere =CollisionSphere(0,1,0, 1)
-        # self.findoppa.node().addSolid(sphere)
-
-        # self.collHandEvent = CollisionHandlerEvent()
-        # self.collHandEvent.addInPattern('%fn-into-%in')
-        # traverser.addCollider(self.findoppa, self.collHandEvent)
-
-        # traverser.addCollider(self.found, self.collHandEvent)
-
-        for i in range(len(self.scanPoints)):
-            self.accept(
-                f'player-into-sensor{i}',
-                self.doSwipe,
-                extraArgs=[self.scanPoints[i]],
-            )
-
-        # scanner hitboxes
-        # for i in range(len(self.scanPoints)):
-
-        # Bullet nodes should survive a flatten operation!
-        # self.worldNP.flattenStrong()
-        # render.ls()
+    #         self.playerIdle = True
 
 
 game = Game()
