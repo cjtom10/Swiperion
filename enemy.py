@@ -1,6 +1,7 @@
 import random
 
 from direct.actor.Actor import Actor
+from direct.showbase.ShowBase import ShowBase
 from panda3d.ai import AICharacter, AIWorld
 from panda3d.bullet import (BulletCylinderShape, BulletRigidBodyNode,
                             BulletWorld, ZUp)
@@ -15,12 +16,17 @@ Z_OUT_OF_BOUNDS = -1000
 class Vessel:
     def __init__(
         self,
+        taskMgr,
+        name,
         worldNP: NodePath,
         world: BulletWorld,
         aiWorld: AIWorld,
         player: NodePath,
         is_possessed=False,
     ) -> None:
+        self.taskMgr = taskMgr
+        self.name = name
+
         self.body = worldNP.attachNewNode(BulletRigidBodyNode('Cylinder'))
         self.body.node().setMass(1.0)
         self.body.node().addShape(CYLINDER_SHAPE)
@@ -43,7 +49,6 @@ class Vessel:
         self.vessel_model.reparentTo(self.body)
         self.vessel_model.setZ(-1.2)
         self.vessel_model.setScale(0.6)
-        # TODO: could dynamically switch back to idle, but it will always be moving or about.coming
         self.vessel_model.loop('walk')
 
         self.possessed_model = Actor(
@@ -63,10 +68,40 @@ class Vessel:
         self.possessed_model.reparentTo(self.body)
         self.possessed_model.setZ(Z_OUT_OF_BOUNDS)
         self.possessed_model.setScale(0.3)
+        # attach claws
+        self.rclaw_model = loader.loadModel('possessed/claw.glb')
+        hand_joint = self.possessed_model.exposeJoint(
+            None, 'modelRoot', 'Hand.R'
+        )
+        self.rclaw_model.reparentTo(hand_joint)
+        self.rclaw_model.setPos(0, 0, 0)
+        self.rclaw_model.setScale(0.3)
+        self.lclaw_model = loader.loadModel('possessed/claw.glb')
+        hand_joint = self.possessed_model.exposeJoint(
+            None, 'modelRoot', 'Hand.L'
+        )
+        self.lclaw_model.reparentTo(hand_joint)
+        self.lclaw_model.setPos(0, 0, 0)
+        self.lclaw_model.setScale(0.3)
 
         self.hitbox = self.body.attachNewNode(CollisionNode('hit'))
         sphere = CollisionSphere(0, 0, 0, 1)
         self.hitbox.node().addSolid(sphere)
+
+        sphere = CollisionSphere(0, 2, 0, 1.5)
+        self.lclaw_hitbox = self.lclaw_model.attachNewNode(
+            CollisionNode('claw_hit')
+        )
+        self.lclaw_hitbox.node().addSolid(sphere)
+        self.rclaw_hitbox = self.rclaw_model.attachNewNode(
+            CollisionNode('claw_hit')
+        )
+        self.rclaw_hitbox.node().addSolid(sphere)
+
+        # TODO: rm, debug only to show hitbox
+        # self.hitbox.show()
+        self.lclaw_hitbox.show()
+        self.rclaw_hitbox.show()
 
         self.aiWorld = aiWorld
         self.player = player
@@ -74,15 +109,90 @@ class Vessel:
         self.aiWorld.addAiChar(self.aiChar)
         self.aiBehaviors = self.aiChar.getAiBehaviors()
 
-        self.is_possessed = is_possessed
+        self.attack_methods = {
+            'slash1': self.slash1,
+            'stab': self.stab,
+        }
 
-    def update(self):
-        if self.is_possessed:
-            if self.possessed_model.getCurrentAnim() != 'run':
-                self.possessed_model.loop('run')
-            self.aiBehaviors.pursue(self.player)
-        else:
+        self.is_possessed = is_possessed
+        self.state = 'pursue'
+
+    def is_player_in_range(self, distance: int = 5):
+        player_pos = self.player.getPos()
+        vessel_pos = self.possessed_model.getPos()
+        return (player_pos - vessel_pos).length() <= distance
+
+    def pursue_player(self, task=None):
+        self.state = 'pursue'
+        self.aiBehaviors.pursue(self.player)
+        if self.possessed_model.getCurrentAnim() == 'run':
+            return
+        self.possessed_model.loop('run')
+        self.taskMgr.add(self.update, f'{self.name}_update')
+
+    def attack(self, task=None):
+        attack = random.choice(list(self.attack_methods.keys()))
+        self.attack_methods[attack]()
+        self.state = 'attack'
+
+    def slash1(self):
+        if self.possessed_model.getCurrentAnim() == 'slash1':
+            return
+        self.possessed_model.play('slash1')
+        self.taskMgr.doMethodLater(
+            self.possessed_model.getDuration('slash1'),
+            self.slash1_post,
+            f'{self.name}_slash2_or_pursue',
+        )
+
+    def slash1_post(self, task=None):
+        self.slash2() if self.is_player_in_range() else self.pursue_player()
+
+    def attack_post(self, task=None):
+        self.attack() if self.is_player_in_range() else self.pursue_player()
+
+    def slash2(self):
+        if self.possessed_model.getCurrentAnim() == 'slash2':
+            return
+        self.possessed_model.play('slash2')
+        self.taskMgr.doMethodLater(
+            self.possessed_model.getDuration('slash2'),
+            self.attack_post,
+            f'{self.name}_attack_or_pursue',
+        )
+        self.state = 'pursue'
+
+    def stab(self):
+        if self.possessed_model.getCurrentAnim() == 'stab':
+            return
+        self.possessed_model.play('stab')
+        self.taskMgr.doMethodLater(
+            self.possessed_model.getDuration('stab'),
+            self.attack_post,
+            f'{self.name}_attack_or_pursue',
+        )
+        self.state = 'pursue'
+
+    def update(self, task=None):
+        if not self.is_possessed:
             self.aiBehaviors.wander()
+            return
+
+        # finish attacks before moving on
+        if (
+            self.state == 'attack'
+            or self.possessed_model.getCurrentAnim() == 'slash2'
+        ):
+            return
+
+        distance_to_player = (
+            self.body.getPos() - self.player.getPos()
+        ).length()
+
+        if distance_to_player > 5:
+            self.pursue_player()
+        else:
+            self.attack()
 
     @property
     def is_possessed(self):
@@ -92,7 +202,7 @@ class Vessel:
     def is_possessed(self, is_possessed: bool):
         # a little magical but oh well
         self._is_possessed = is_possessed
-        if (is_possessed):
+        if is_possessed:
             self.possessed_model.setZ(-1)
             self.vessel_model.setZ(Z_OUT_OF_BOUNDS)
         else:

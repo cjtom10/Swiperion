@@ -28,9 +28,8 @@ from panda3d.bullet import *
 from panda3d.core import *
 
 from enemy import Vessel
-
-
 from spirit import Spirit
+
 
 class Game(DirectObject):
     def __init__(self):
@@ -175,26 +174,27 @@ class Game(DirectObject):
 
         return task.cont
 
-  
     def updateSpirit(self):
-        if self.spirit.state == "float":
+        if self.spirit.state == 'float':
             self.spirit.floatUp()
-        elif self.spirit.state == "oscillate":
+        elif self.spirit.state == 'oscillate':
             self.spirit.oscillate()
-        elif self.spirit.state == "decide":
+        elif self.spirit.state == 'decide':
             self.spirit.decideTarget(self.playerM)
-        elif self.spirit.state == "move":
+        elif self.spirit.state == 'move':
             self.spirit.takeAction()
 
     def updatePlayer(self):
         self.MP.setPos(self.boxNP.getPos(render))
         self.playerM.setPos(self.boxNP.getPos(render))
         self.playerM.setH(self.MP, self.charAngle)
-        if inputState.isSet('left'):  self.charAngle+=1
-        if inputState.isSet('right'): self.charAngle -=1
+        if inputState.isSet('left'):
+            self.charAngle += 1
+        if inputState.isSet('right'):
+            self.charAngle -= 1
 
         ### anims here
-        print('char velocity', self.boxNP.node().getLinearVelocity().z)
+        # print('char velocity', self.boxNP.node().getLinearVelocity().z)
 
         if abs(self.boxNP.node().getLinearVelocity().y) > 0.3:
             walking = True
@@ -303,7 +303,7 @@ class Game(DirectObject):
         self.charAngle = 0
         # shape = BulletCapsuleShape(1,1.5)
 
-        #enemy setup
+        # enemy setup
         self.spirit = Spirit(self.world, self.worldNP, self.playerM)
 
         self.boxNP = self.worldNP.attachNewNode(BulletRigidBodyNode('Box'))
@@ -340,14 +340,16 @@ class Game(DirectObject):
         self.aiWorld = AIWorld(self.worldNP)
         # spawn vessels
         self.vessels: List[Vessel] = []
-        for _ in range(8):
-            self.vessels.append(
-                Vessel(self.worldNP, self.world, self.aiWorld, self.playerM)
-            )
-        for _ in range(2):
+        for i in range(10):
             self.vessels.append(
                 Vessel(
-                    self.worldNP, self.world, self.aiWorld, self.playerM, True
+                    taskMgr,
+                    f'vessel{i}',
+                    self.worldNP,
+                    self.world,
+                    self.aiWorld,
+                    self.playerM,
+                    i > 7,
                 )
             )
 
