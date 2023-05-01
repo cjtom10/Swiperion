@@ -46,15 +46,28 @@ class PandaBulletCharacterController(object):
         
         self.movementState = "ground"
         self.movementStateFilter = {
-            "ground": ["ground", "jumping", "falling"],
-            "jumping": ["ground", "falling"],
-            "falling": ["ground"],
+            "ground": ["ground", "jumping", "falling","attacking","dodging", "prayer" ],
+            "jumping": ["ground", "falling", "jumping"],
+            "falling": ["ground", "jumping"],
             "flying": [],
+            "dodging": ["ground"],
+            "attacking":[],
+            "endaction": []
         }
-        
+        self.airStates = ["jumping", "falling"]
+        self.actionStates = ["dodging", "attacking"]
+
+        self.movePoints = 3 # limit doble/triple jumps x dodge. resets when lands or succesful prayer
+
         # Prevent the KCC from moving when there's not enough room for it in the next frame
         # It doesn't work right now because I can't figure out how to add sliding. Sweep test could work, but it would cause problems with penetration testing and steps
         # That said, you probably won't need it, if you design your levels correctly
+        
+        self.airDir = Vec3(0,0,0) #mvmt dir for air states
+        self.atkDir = Vec3(0,0,0) #mvmt for attacking/prayting
+        self.dodgedir = Vec3(0,0,0) #mvmt dir for something im noitr sure
+        self.dodgeFrame = 0
+
         self.predictFutureSpace = False
         self.futureSpacePredictionDistance = 10.0
         
@@ -173,6 +186,11 @@ class PandaBulletCharacterController(object):
             "jumping": self.__processJumping,
             "falling": self.__processFalling,
             "flying": self.__processFlying,
+            
+            "dodging": self.processdodge,
+            "endaction": self.endaction,
+            "attacking": self.processAttack,
+
         }
         
         if timestep is None:    
@@ -195,12 +213,51 @@ class PandaBulletCharacterController(object):
     
     
     
+    def endaction(self):
+        """buffer state for exiting attack/parry/vault etc"""
+        # print('state end action')
+        # if "exitdodge" not in self.movementStateFilter[self.movementState]:
+        #     return
+        # if self.queueJump == True:
+        #     self.startJump(5)
+        #     self.__jump
+        #     self.queueJump = False
+        self.currentAction = None
+        self.isdodging = False
+        # self.isVaulting = False
+        print('end act8ionnnn')
+        self.__currentPos = self.movementParent.getPos()
+        # if self.state == "OF":
+        self.dodgeFrame=0
+        if not self.isOnGround() and self.__footContact==None:
+                self.__fall()
+        else:
+            self.movementState = "ground"        
+      
+
+    # def startattack(self):
+    #     taskMgr.add(self.attacking)
+
     
+    # def attacking(self, task):
+    #     if task.time <1:
+    #     # if self.isAttacking:
+    #         self.movementState = "attacking"
+    #         return Task.cont
+    
+    #     else:
+    #         if self.attack2 == False:
+    #             self.movementState = "exitdodge"
+    #             self.jumpdir = Vec3(0,0,0)
+
+    #             return Task.done    
     
     def __land(self):
+        self.movePoints=3
         self.movementState = "ground"
         print("new state", self.movementState)
-    
+
+        self.airDir = 0
     def __fall(self):
         self.movementState = "falling"
         
@@ -276,7 +333,12 @@ class PandaBulletCharacterController(object):
             self.__land()
             if self.__fallCallback[0] is not None:
                 self.__fallCallback(self.__fallStartPos, *self.__fallCallback[1], **self.__fallCallback[2])
-    
+        
+        # self.airDir /= 
+        # print('air dir', self.airDir)
+        self.setLinearMovement(self.airDir)
+        
+
     def __processJumping(self):
         if self.__headContact is not None and self.__capsuleTop >= self.__headContact[0].z:
             # This shouldn't happen, but just in case, if we hit the ceiling, we start to fall
@@ -293,6 +355,10 @@ class PandaBulletCharacterController(object):
         if round(self.__currentPos.z, 2) >= self.jumpMaxHeight:
             self.__fall()
     
+        # print(self.__linearVelocity)
+        # print('air dir', self.airDir)
+        self.setLinearMovement(self.airDir)
+
     def __processFlying(self):
         if self.__footContact and self.__currentPos.z - 0.1 < self.__footContact[0].z and self.__linearVelocity.z < 0.0:
             self.__currentPos.z = self.__footContact[0].z
@@ -301,7 +367,74 @@ class PandaBulletCharacterController(object):
         if self.__headContact and self.__capsuleTop >= self.__headContact[0].z and self.__linearVelocity.z > 0.0:
             self.__linearVelocity.z = 0.0
     
-    
+    def processdodge(self):
+        # self.dodgedir *= x # add x bro
+        
+        # if "dodging" not in self.movementStateFilter[self.movementState]:
+        #     # print('here')
+        #     return
+        if self.dodgeFrame==None:
+            return
+        if self.dodgeFrame<4:
+            return
+        if self.dodgeFrame>=17:
+            print('enddodghe')
+            self.movementState = "endaction"
+
+        self.isdodging=True
+        if self.__footContact is not None:
+                self.__currentPos.z = self.__footContact[0].z
+
+        # if self.state == 'OF':
+            # if self.__footContact is not None:
+            #     self.__currentPos.z = self.__footContact[0].z
+
+
+            # if self.dodgedir == None:
+            #     self.dodgedir = self.movementParent.getRelativeVector(self.char,Vec3(0,20,0))
+            #     # self.dodgedir = self.char.getQuat().getForward() * 20
+            #     print('dodgedir', self.dodgedir)
+        print('dodge  dir',self.dodgedir)
+        self.setLinearMovement(self.dodgedir) 
+
+            # self.jumpdir = None
+    def processAttack(self): ### TO DO : pass arguments here to account for atx with movement
+        # print('attacking,', self.airAttack)
+        # print(self.isOnGround())
+        # self.__world.removeRigidBody(self.__walkCapsuleNP.node())
+        # print(self.atkDir)
+        self.setLinearMovement(self.atkDir)
+        # if self.__footContact and self.__currentPos.z - 0.1 < self.__footContact[0].z and self.__linearVelocity.z < 0.0:
+            # self.__currentPos.z = self.__footContact[0].z
+            # self.__linearVelocity.z = 0.0
+        # atkVec =Vec3(0,0,0)
+        # if self.isParrying ==True and self.isAttacking==True: #no mvt for parries
+            # if self.airParry==True:
+            #     atkVec= -2
+            # else:    
+                # atkVec = 0
+                # print('parry')
+        # if self.airAttack == False:
+            # if self.isParrying ==True:
+            #     atkVec = 0
+                # print('parry')
+            # print(self.isAttacking)
+            # if not self.isOnGround:
+            #     atkVec = self.char.getQuat().getForward() * 4
+            #     atkVec.z +=-10
+            #     print('airattack')
+            #     # self.__fall()
+            # elif self.isAttacking == True: #and self.isParrying ==False:
+            #     # print(atkVec)
+            #     if self.state == "OF":
+            #         # atkVec = self.char.getQuat().getForward() * 2
+            #         atkVec=self.movementParent.getRelativeVector(self.char,Vec3(0,5,0))
+                # if self.state == "mech":
+                #     atkVec = self.__crouchCapsuleNP.getQuat().getForward() * 15
+                    # self.mech.setH(self.movementParent, 0)
+                # print('attackvec', )
+            # print(atkVec)
+            
     
     def __checkFutureSpace(self, globalVel):
         globalVel = globalVel * self.futureSpacePredictionDistance

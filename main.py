@@ -11,6 +11,9 @@ import direct.directbase.DirectStart
 from direct.actor.Actor import Actor
 from direct.showbase.DirectObject import DirectObject
 from direct.showbase.InputStateGlobal import inputState
+from direct.interval.IntervalGlobal import Sequence, Parallel, Func, Wait
+from direct.interval.LerpInterval import *
+from direct.interval.ActorInterval import ActorInterval, LerpAnimInterval
 from panda3d.core import *
 from panda3d.bullet import *
 
@@ -45,18 +48,21 @@ globalClock.setMode(globalClock.MLimited)
 globalClock.setFrameRate(120.0)
 
 from kcc import PandaBulletCharacterController
-
+import simplepbr
 
 class Game(DirectObject):
 
     def __init__(self):
 
     # now, x and y can be considered relative movements
+        pipeline = simplepbr.init()
+        pipeline.use_normal_maps = True
+        pipeline.use_occlusion_maps = True
 
         base.setBackgroundColor(0.1, 0.1, 0.8, 1)
         base.setFrameRateMeter(True)
         
-        base.cam.setPos(0, -30, 20)
+        base.cam.setPos(0, -20, 10)
         base.cam.lookAt(0, 0, 0)
 
         ml.resolveMouse()
@@ -64,8 +70,10 @@ class Game(DirectObject):
         # Input
         self.accept('escape', self.doExit)
         self.accept('space', self.doJump)
-        self.accept('c', self.doCrouch)
-        self.accept('c-up', self.stopCrouch)
+        self.accept('shift', self.doDodge)
+        self.accept('q', self.doAttack)
+        # self.accept('c', self.doCrouch)
+        # self.accept('c-up', self.stopCrouch)
         
         self.accept('control', self.startFly)
         self.accept('control-up', self.stopFly)
@@ -77,7 +85,7 @@ class Game(DirectObject):
         inputState.watchWithModifiers('turnLeft', 'q')
         inputState.watchWithModifiers('turnRight', 'e')
         
-        inputState.watchWithModifiers('run', 'shift')
+        # inputState.watchWithModifiers('run', 'shift')
         
         inputState.watchWithModifiers('flyUp', 'r')
         inputState.watchWithModifiers('flyDown', 'f')
@@ -95,11 +103,180 @@ class Game(DirectObject):
         sys.exit(1)
     
     def doJump(self):
+
+        if self.character.movePoints <= 0:
+            print('out of mp')
+            return
+        if self.isAttacking==True:
+            return
+        if self.character.movementState == "attacking" and self.isAttacking==False:
+                self.finishAction()
+        self.character.movePoints-=1
+        # self.character.currentAction = 'jump'
+        # print('speed',self.speed,'airdir', self.character.airDir)
+        # if self.speed != Vec3(0, 0, 0):
+        self.character.airDir = self.speed
+        # else:
+        #     self.character.airDir = self.playerM.getQuat().getForward() * 5 
+        # print('angle',self.angle)
+        if self.speed != Vec3(0,0,0):
+            self.playerM.setH(self.angle)
+        self.speed = 0
         self.character.startJump(3)
-    
+        
+        # print(self.angle)
+
+        self.character.currentAction = None
+
+    def doDodge(self):
+        
+        if self.character.movePoints <= 0:
+            print('out of mp')
+            return
+        if self.isAttacking==True:
+            return
+        if self.character.movementState == "attacking" and self.isAttacking==False:
+                self.finishAction()
+        if self.character.movementState in self.character.airStates:
+            self.character.movePoints-=1
+        if self.speed != Vec3(0,0,0):
+            self.playerM.setH(self.angle)
+        self.character.dodgedir = self.playerM.getQuat().getForward() * 15
+        self.speed = 0
+        self.character.movementState = 'dodging'
+        
+        self.animSeq = Sequence()
+
     def doCrouch(self):
         self.character.startCrouch()
-    
+    def doAttack(self):
+        if self.character.movementState in self.character.airStates:
+            return
+
+        # if self.character.movementState == 'attacking':    
+        if self.isAttacking==True:
+
+                return
+            # else:
+
+        if self.speed != Vec3(0,0,0):
+            self.playerM.setH(self.angle)
+        
+        
+        self.speed = 0
+        self.isAttacking = True
+        self.character.movementState='attacking'
+        if self.currentStrike==1:
+            self.atkAnim('strike1', 4,14)
+            self.currentStrike +=1
+        if self.currentStrike==2:
+            self.atkAnim('strike2', 4,8)
+            self.currentStrike +=3
+        if self.currentStrike==3:
+            self.atkAnim('strike2', 14,18)
+
+        
+            #     def doSlashatk(self):
+            # if self.atx!=None and len(self.atx) >=4:
+            #     print('combo limit')
+            #     return
+
+            # # if self.character.movementState == 'dodging': 
+
+            # # if self.character.movementState in self.character.airstates:# also if air attacking
+            #     # print('air attack x')
+            #     # self.smashAttack()
+            # if self.character.isAttacking == True and self.attackqueue>0: 
+                
+            #     # if self.attackQueued==True:
+            #     #     print('attack already queued')
+            #     if self.attackQueued ==False:
+            #         # print('queue attack x- do slash # ', self.attackqueue+1)
+            #         self.qdatk = 'slash'
+            #         self.attackQueued=True
+            # else:
+            #     # print('shouldnt get here if ur dodging....')
+            #     self.slashAttack()
+
+    # def queueStage(self,x, qud):
+    #     self.attackqueue = x 
+    #     self.attackQueued = qud
+    #     # if qud==True:
+    #     #     self.attached = False
+    # def check4Queue(self):
+    #     """if there is a queued attack, this will trigger it"""
+    #     if self.character.movementState!='attacking':
+    #         self.character.movementState='attacking'
+    #     if self.attackQueued==True and self.attackqueue>0: #or self.character.movementState == 'dodging':
+    #         print('do queued attack',self.attackqueue+1)
+    #         if self.qdatk == 'slash':
+    #         # self.finish()
+    #         # if type == 'slash':
+    #             self.attached = False
+    #             self.slashAttack() 
+    #         if self.qdatk == 'stab':
+    #             self.attached = False
+    #             self.stabattack()    
+    # def atkAnim(self,order,)
+    def atkAnim(self, anim, activeFrame, bufferFrame):
+        
+        self.character.atkDir = self.playerM.getQuat().getForward() * 2
+        def atkFalse():
+            self.isAttacking = False
+
+
+        a1 =self.playerM.actorInterval(anim,startFrame=0,endFrame = activeFrame)
+        active = self.playerM.actorInterval(anim,startFrame=activeFrame+1,endFrame = bufferFrame)
+        buffer = self.playerM.actorInterval(anim,startFrame=bufferFrame+1)
+
+        atkF = Func(atkFalse)
+        fin = Func(self.finishAction)
+
+        self.animSeq = Sequence(a1,active,buffer,atkF,fin)
+        self.animSeq.start()
+    # def attach(self,bone):
+       
+    #     if self.attached == False: #and self.hitcontact==False:
+    #         # if self.character.state == "OF":
+            
+    #         self.hb(parent=bone, node = self.atkNode, shape=CollisionCapsule(0, .5, 0, 0, 0, 0, .5))
+        #  if self.character.state == "mech":
+            #  self.hb(parent=self.bladeL, node = self.atkNode, shape=CollisionCapsule(0, .5, 0, 0, 2, 0, 1))
+            #  self.hb(parent=self.bladeR, node = self.atkNode, shape=CollisionCapsule(0, .5, 0, 0, 2, 0, 1))
+    def hb(self, parent, node, shape, pos =(0,0,0), visible=True):
+            """player hitboxes for attacks/parries"""
+            # self.character.movementState = "attacking" 
+            
+            ##
+            # print(self.speed)
+            # self.footR = self.charM.expose_joint(None, 'modelRoot', 'foot.R')
+            # self.footL = self.charM.expose_joint(None, 'modelRoot', 'foot.L')
+            HitB = CollisionCapsule(0, .5, 0, 0, 0, 0, .5)
+            # self.footHB = self.foot.attachNewNode(CollisionNode('rightfoot'))
+            node.reparentTo(parent)
+            node.node().addSolid(shape)
+            # node.setZ(-.2)
+            node.setPos(pos)
+            
+            self.attached = True
+            if visible ==True:
+                node.show()
+            # self.speed /= 6
+            # self.footHB.instanceTo(self.footL)
+
+            # shape = BulletCapsuleShape(.5, 1)
+            # self.rightfootHB.reparentTo(self.foot)
+            # self.rightfootHB.setP(90)
+            # self.rightfootHB.node().addShape(shape)
+            # self.world.attachGhost(self.rightfootHB.node())
+
+    def finishAction(self):
+         self.atkQueue=None
+         self.character.movementState = 'endaction'  
+         if self.animSeq!=None:     
+            self.animSeq.pause() 
+            self.animSeq=None
+         self.currentStrike =1
     def stopCrouch(self):
         self.character.stopCrouch()
     
@@ -115,7 +292,7 @@ class Game(DirectObject):
         
         v = 5.0
         
-        if inputState.isSet('run'): v = 15.0
+        # if inputState.isSet('run'): v = 15.0
         
         if inputState.isSet('forward'): self.speed.setY(v)
         if inputState.isSet('reverse'): self.speed.setY(-v)
@@ -128,13 +305,23 @@ class Game(DirectObject):
         if inputState.isSet('turnLeft'):  omega =  120.0
         if inputState.isSet('turnRight'): omega = -120.0
 
+        if self.character.movementState in self.character.airStates or self.character.movementState in self.character.actionStates:
+            if self.speed!=0 and self.character.movementState == "attacking" and self.isAttacking==False:
+                self.finishAction()
+            # self.airDir= self.speed
+            # self.speed.x /= 2
+            # self.speed.y /=2
+            # print('no inpuit')
+            return
+
+
+        
         self.character.setAngularMovement(omega)
         self.character.setLinearMovement(self.speed, True)
 
-        if self.speed != Vec3(0,0,0):
-         self.playerAngle = math.atan2(-self.speed.x, self.speed.y)
-        self.playerM.setH(math.degrees(self.playerAngle))
         
+        # self.playerAngle = math.atan2(-self.speed.x, self.speed.y)
+
     def update(self, task):
         dt = globalClock.getDt()
         
@@ -198,11 +385,27 @@ class Game(DirectObject):
         self.character.setPos(render, Point3(0, 0, 0.5))
         self.playerM = Actor('models/player/player.bam',{
                                 'walk': 'models/player/player_walking.bam',
-                                'idle': 'models/player/player_Idle.bam'
+                                'idle': 'models/player/player_idle.bam',
+                                "jump":'models/player/player_JUMP.bam',
+                                "fall": 'models/player/player_FALL.bam',
+                                "land": 'models/player/player_land.bam',
+                                "dodge": 'models/player/player_dodge.bam',
+                                "strike1": 'models/player/player_strike1.bam',
+                                "strike2": 'models/player/player_strike2.bam',
+                                "strike3": 'models/player/player_strike3.bam',
+                                "prayer1": 'models/player/player_pray1.bam',
+                                "prayer2": 'models/player/player_pray2.bam',
         })
         self.playerM.reparentTo(self.character.movementParent)
         self.playerIdle = True
+
+
+        self.isAttacking = False # when this is false, dodges, movement, jumps end attack, asttacking 
+        self.angle = 0
         self.playerAngle = 0
+        self.animSeq = None
+        self.currentStrike=1
+     
 
         X = 0.3
         Y = 4.0
@@ -275,16 +478,92 @@ class Game(DirectObject):
         self.lvl = self.worldNP.attachNewNode('lvl')
         
     def updatePlayer(self):
-        if self.character.isOnGround():
+        # if self.character.currentAction!=None:
+        #     return
+        # print('anf',self.angle)
+        # print('mvtstate', self.character.movementState)
+        # currentAnim= self.playerM.getCurrentAnim()
+        # if self.character.movementState in self.character.airStates:
+        #     self.character.movementState == "jumping":
+        #         if(currentAnim)!="jump":
+        # print(self.character.movementState)
+
+        #set angle here
+        self.angle = (math.degrees(math.atan2(-self.speed.x, self.speed.y)))% 360
+        # self.angle = self.angle % 360
+        h = self.playerM.getH() % 360
+        def interAngle(angle):
+            #interpolates player angle
+            self.angle = math.degrees(angle)
+            self.angle = self.angle % 360
+            h = self.playerM.getH() % 360
+            
+            # print(self.playerAngle,abs(self.playerAngle-self.angle))
+            if abs(self.playerAngle-self.angle)<11:
+                return
+            if self.angle>h:
+                self.playerAngle+=20
+            if self.angle<h:
+                self.playerAngle-=20
+        def rotate_character(current_angle, new_angle):
+            if abs(new_angle - current_angle) > 180:
+                if new_angle < current_angle:
+                    new_angle += 360
+                else:
+                    current_angle += 360
+
+            clockwise = new_angle > current_angle
+            diff = abs(new_angle - current_angle) % 360
+            # print('diff', diff) 
+            if diff<10:
+                return current_angle
+            if clockwise:
+                current_angle += 10
+            else:
+                current_angle -= 10
+
+            current_angle %= 360
+
+            return current_angle
+        if self.speed != Vec3(0,0,0):
+            # interAngle(math.atan2(-self.speed.x, self.speed.y))
+            if self.character.isOnGround():
+                if self.character.movementState in self.character.actionStates:
+                    pass
+                else:
+                    self.playerM.setH(rotate_character(h, self.angle))
+        
+        #anims here
+        currentAnim= self.playerM.getCurrentAnim()
+        anim=None
+        if self.animSeq!=None:
+            if self.animSeq.isPlaying():
+                return
+            
+        if self.character.movementState == "dodging":
+            anim = 'dodge'
+            self.character.dodgeFrame = self.playerM.getCurrentFrame()
+        if self.character.movementState in self.character.airStates:
+            if self.character.movementState == "jumping":
+                # if(currentAnim)!="jump":
+                anim = "jump"
+            if self.character.movementState == "falling":
+                anim = "fall"    
+        if self.character.isOnGround() and self.character.movementState!='dodging':
             if self.speed !=0:
                 anim = 'walk'
             else: anim = 'idle'
-            if self.playerM.getCurrentAnim()!=anim:    
+        if currentAnim!=anim:    
                 self.playerM.setPlayRate(1,anim )
                 self.playerM.play(anim)
                 # print('anim = ', anim, self.playerM.getCurrentAnim)
-            else:
-                return
+            # else:
+            #     return
+        # else:
+    def collisionSetup(self):
+        traverser = CollisionTraverser('collider')
+        base.cTrav = traverser
+    
     def checkGhost(self, task):
         pass
         # ghost = self.ghost.node()
