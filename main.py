@@ -19,6 +19,8 @@ from panda3d.bullet import *
 
 import math
 
+import random
+
 from mouseLook import MouseLook
 base.disableMouse()
 
@@ -71,7 +73,9 @@ class Game(DirectObject):
         self.accept('escape', self.doExit)
         self.accept('space', self.doJump)
         self.accept('shift', self.doDodge)
-        self.accept('q', self.doAttack)
+        self.currentStrike = 0
+        self.accept('mouse1', self.doAttack)
+        self.accept('mouse3', self.doPrayer)#, [self.currentStrike])
         # self.accept('c', self.doCrouch)
         # self.accept('c-up', self.stopCrouch)
         
@@ -95,6 +99,8 @@ class Game(DirectObject):
         
         # Physics
         self.setup()
+
+        self.atx = None #keeping track of attacks for combo
         
         # _____HANDLER_____
     
@@ -108,9 +114,11 @@ class Game(DirectObject):
             print('out of mp')
             return
         if self.isAttacking==True:
+
             return
         if self.character.movementState == "attacking" and self.isAttacking==False:
-                self.finishAction()
+            self.finishAction()
+            
         self.character.movePoints-=1
         # self.character.currentAction = 'jump'
         # print('speed',self.speed,'airdir', self.character.airDir)
@@ -123,6 +131,7 @@ class Game(DirectObject):
             self.playerM.setH(self.angle)
         self.speed = 0
         self.character.startJump(3)
+        print('jump')
         
         # print(self.angle)
 
@@ -150,30 +159,77 @@ class Game(DirectObject):
     def doCrouch(self):
         self.character.startCrouch()
     def doAttack(self):
+        print('attack no',self.currentStrike)
         if self.character.movementState in self.character.airStates:
             return
-
+        # if self.currentStrike>=3:
+        #     self.currentStrike =  1
+        #     print('combo limit')
+            # return
         # if self.character.movementState == 'attacking':    
         if self.isAttacking==True:
+            print('already attacking')
+            if self.currentStrike>1:
+                self.attackQueued=True
 
-                return
+            return
+        if self.character.movementState =="attacking":
+            if self.animSeq!=None:
+                self.animSeq.pause()
+                self.animSeq=None
             # else:
 
         if self.speed != Vec3(0,0,0):
             self.playerM.setH(self.angle)
-        
-        
-        self.speed = 0
+        print('attacl no', self.currentStrike)
+        self.character.atkDir = self.playerM.getQuat().getForward() 
+        # self.speed = 0
         self.isAttacking = True
         self.character.movementState='attacking'
-        if self.currentStrike==1:
-            self.atkAnim('strike1', 4,14)
+        if self.currentStrike ==1:
+            self.atkAnim('strike1', 4,20)
             self.currentStrike +=1
-        if self.currentStrike==2:
-            self.atkAnim('strike2', 4,8)
-            self.currentStrike +=3
-        if self.currentStrike==3:
-            self.atkAnim('strike2', 14,18)
+            return
+        if self.currentStrike ==2:
+            self.atkAnim('strike2', 4,20)
+            self.currentStrike +=1
+            return
+        if self.currentStrike ==3:
+            self.atkAnim('strike3', 4,20)
+            self.currentStrike +=1
+            #     return
+        # if self.currentStrike==2:
+    def doPrayer(self):
+        if self.isAttacking==True:
+            print('already attacking')
+
+            return
+         
+        if self.character.movementState =="attacking":
+            if self.animSeq!=None:
+                self.animSeq.pause()
+                self.animSeq=None
+        if self.character.movementState =="attacking":
+            if self.animSeq!=None:
+                self.animSeq.pause()
+                self.animSeq=None
+        if self.speed != Vec3(0,0,0):
+            self.playerM.setH(self.angle)
+        self.isAttacking = True
+        self.character.movementState='attacking'
+        self.character.atkDir = 0
+        no = random.randint(1,2)
+        self.atkAnim(f'prayer{no}', 4,16, )
+        #     self.atkAnim('strike2', 4,8)
+        #     self.currentStrike +=1
+        #     return
+        # if self.currentStrike==3:
+        #     #  self.finishAction()
+        #     #  self.isAttacking = True
+        # #     self.character.movementState='attacking'
+        #     self.atkAnim('strike2', 14,18)
+        #     self.currentStrike +=1
+        #     return
 
         
             #     def doSlashatk(self):
@@ -203,38 +259,61 @@ class Game(DirectObject):
     #     self.attackQueued = qud
     #     # if qud==True:
     #     #     self.attached = False
-    # def check4Queue(self):
-    #     """if there is a queued attack, this will trigger it"""
-    #     if self.character.movementState!='attacking':
-    #         self.character.movementState='attacking'
-    #     if self.attackQueued==True and self.attackqueue>0: #or self.character.movementState == 'dodging':
-    #         print('do queued attack',self.attackqueue+1)
-    #         if self.qdatk == 'slash':
-    #         # self.finish()
-    #         # if type == 'slash':
-    #             self.attached = False
-    #             self.slashAttack() 
-    #         if self.qdatk == 'stab':
-    #             self.attached = False
-    #             self.stabattack()    
+    def check4Queue(self):
+        """if there is a queued attack, this will trigger it"""
+        if self.character.movementState!='attacking':
+            self.character.movementState='attacking'
+        if self.attackQueued==True: #or self.character.movementState == 'dodging':
+      
+            # self.finish()
+            # if type == 'slash':
+            if self.currentStrike ==2:
+                self.atkAnim('strike2', 4,20)
+                self.isAttacking=True
+                self.currentStrike +=1
+                self.attackQueued=False
+                return
+            if self.currentStrike ==3:
+                self.atkAnim('strike3', 4,20)
+                self.isAttacking=True
+                self.currentStrike +=1
+                self.attackQueued=False
+        else:
+            return
     # def atkAnim(self,order,)
     def atkAnim(self, anim, activeFrame, bufferFrame):
+
+        if self.animSeq is not None:#end attack anim sequence
+                if self.animSeq.isPlaying():
+                        self.animSeq.pause()
         
-        self.character.atkDir = self.playerM.getQuat().getForward() * 2
+        
         def atkFalse():
             self.isAttacking = False
 
 
         a1 =self.playerM.actorInterval(anim,startFrame=0,endFrame = activeFrame)
         active = self.playerM.actorInterval(anim,startFrame=activeFrame+1,endFrame = bufferFrame)
-        buffer = self.playerM.actorInterval(anim,startFrame=bufferFrame+1)
+        buffer = self.playerM.actorInterval(anim,startFrame=bufferFrame+1, endFrame=30)
 
         atkF = Func(atkFalse)
         fin = Func(self.finishAction)
+        c4q= Func(self.check4Queue)
 
-        self.animSeq = Sequence(a1,active,buffer,atkF,fin)
+        self.animSeq = Sequence(a1,active,atkF,c4q,buffer,fin)
         self.animSeq.start()
-    # def attach(self,bone):
+    # def prayerAnim(self,anim):
+    #     if self.animSeq is not None:#end attack anim sequence
+    #             if self.animSeq.isPlaying():
+    #                     self.animSeq.pause()
+                        
+    #     a1 =self.playerM.actorInterval(anim,startFrame=0,endFrame = activeFrame)
+    #     active = self.playerM.actorInterval(anim,startFrame=activeFrame+1,endFrame = bufferFrame)
+    #     buffer = self.playerM.actorInterval(anim,startFrame=bufferFrame+1, endFrame=30)
+
+    #     atkF = Func(atkFalse)
+    #     fin = Func(self.finishAction)
+    # # def attach(self,bone):
        
     #     if self.attached == False: #and self.hitcontact==False:
     #         # if self.character.state == "OF":
@@ -276,7 +355,8 @@ class Game(DirectObject):
          if self.animSeq!=None:     
             self.animSeq.pause() 
             self.animSeq=None
-         self.currentStrike =1
+         self.attackQueued=False
+        #  self.currentStrike =1
     def stopCrouch(self):
         self.character.stopCrouch()
     
@@ -326,6 +406,8 @@ class Game(DirectObject):
         dt = globalClock.getDt()
         
         self.processInput(dt)
+
+        # print('is attacking?', self.isAttacking)
         
         oldCharPos = self.character.getPos(render)
         self.character.setH(base.camera.getH(render))
@@ -343,6 +425,12 @@ class Game(DirectObject):
         # ml.orbitCenter = self.character.getPos(render)
         # base.camera.setPos(base.camera.getPos(render) + delta)
         self.updatePlayer()
+        if self.character.movementState!='attacking':
+            self.currentStrike = 1
+            # print('state attacking', self.isAttacking, self.currentStrike)
+        
+
+
         return task.cont
         
     def cleanup(self):
@@ -379,6 +467,9 @@ class Game(DirectObject):
         
         spirit = loader.loadModel('spirit.bam')
         spirit.reparentTo(render)
+
+        self.attackQueued = False
+        self.attached = False
 
         #player setup 
         self.character = PandaBulletCharacterController(self.world, self.worldNP, 1.75, 1.3, 0.5, 0.4)

@@ -47,12 +47,12 @@ class PandaBulletCharacterController(object):
         self.movementState = "ground"
         self.movementStateFilter = {
             "ground": ["ground", "jumping", "falling","attacking","dodging", "prayer" ],
-            "jumping": ["ground", "falling", "jumping"],
+            "jumping": ["ground", "falling", "jumping", ],
             "falling": ["ground", "jumping"],
             "flying": [],
             "dodging": ["ground"],
             "attacking":[],
-            "endaction": []
+            "endaction": ["jumping",]
         }
         self.airStates = ["jumping", "falling"]
         self.actionStates = ["dodging", "attacking"]
@@ -268,7 +268,9 @@ class PandaBulletCharacterController(object):
         print ("new state", self.movementState)
     
     def __jump(self, maxZ = 3.0):
+
         if "jumping" not in self.movementStateFilter[self.movementState]:
+            # print('here')
             return
         
         maxZ += self.__currentPos.z
