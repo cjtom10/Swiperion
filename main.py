@@ -71,8 +71,7 @@ class Game(DirectObject):
         base.setBackgroundColor(0.1, 0.1, 0.8, 1)
         base.setFrameRateMeter(True)
 
-        base.cam.setPos(0, -13, 7)
-        base.cam.lookAt(0, 0, 0)
+        
 
         ml.resolveMouse()
 
@@ -225,10 +224,11 @@ class Game(DirectObject):
             if self.animSeq != None:
                 self.animSeq.pause()
                 self.animSeq = None
-        if self.character.movementState == 'attacking':
-            if self.animSeq != None:
-                self.animSeq.pause()
-                self.animSeq = None
+                self.finishAction()
+        # if self.character.movementState == 'attacking':
+        #     if self.animSeq != None:
+        #         self.animSeq.pause()
+        #         self.animSeq = None
         if self.speed != Vec3(0, 0, 0):
             self.playerM.setH(self.angle)
         self.isAttacking = True
@@ -478,11 +478,39 @@ class Game(DirectObject):
 
         self.world.doPhysics(dt, 4, 1.0 / 120.0)
 
-        char2cam = self.character.getY(base.cam)
-        # print('char dist to cam:', char2cam)
-        base.camera.setY(self.character.getY())
-        # ml.orbitCenter = self.character.getPos(render)
-        # base.camera.setPos(base.camera.getPos(render) + delta)
+        
+ #######update cam 
+        self.camdummy.setPos(base.cam.getPos(render))
+        char2cam = self.character.getPos(self.camdummy)
+        
+
+        c = float(( char2cam-Vec3(0,0,0)).length())
+        a = float(char2cam.z)
+        b = float(char2cam.y)
+        # camPitch = math.atan(a/b) * 180 / math.pi
+
+        camPitch = math.degrees(math.asin(a/c))
+        ypos= base.camera.getY()
+        xpos= base.camera.getX()
+        # if self.character.isOnGround() ==False:
+        base.cam.setP(camPitch)
+        # print(a,)
+        # print('campitch',camPitch,'char2cam', char2cam)
+        # print('char dist to cam:', a,b,c)
+
+        # base.camera.setY(self.character.getY())
+
+        if char2cam.y<6 or char2cam.y> 15:
+            ypos += delta.y
+        if char2cam.x<-4 or char2cam.x> 4:
+            xpos += delta.x
+        # if char2cam>8:
+        #     ypos += delta.y
+        base.camera.setX(xpos)
+        base.camera.setY(ypos)
+        # base.cam.setP(camPitch)
+        # print('campit h',camPitch,'abc',a,b,c)
+      
         self.updatePlayer()
         if self.character.movementState != 'attacking':
             self.currentStrike = 1
@@ -507,6 +535,12 @@ class Game(DirectObject):
         self.world = BulletWorld()
         self.world.setGravity(Vec3(0, 0, -9.81))
         self.world.setDebugNode(self.debugNP.node())
+
+        #camera
+        self.camdummy = NodePath('camdummy')
+        base.cam.setPos(0, -8,2)
+        base.cam.setP(-7)
+        
 
         # Ground
         shape = BulletPlaneShape(Vec3(0, 0, 1.0), 0)
@@ -552,6 +586,7 @@ class Game(DirectObject):
                 'prayer2': 'models/player/player_pray2.bam',
             },
         )
+        
         self.handR = self.playerM.expose_joint(None, 'modelRoot', 'Hand.R')
         self.handL = self.playerM.expose_joint(None, 'modelRoot', 'Hand.L')
 
