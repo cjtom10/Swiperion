@@ -180,6 +180,9 @@ class Game(DirectObject):
         #     print('combo limit')
         # return
         # if self.character.movementState == 'attacking':
+        if self.isPraying==True:
+            print(';cant attaklc, praying')
+            return
         if self.isAttacking == True:
             print('already attacking')
             if self.currentStrike > 1:
@@ -215,8 +218,8 @@ class Game(DirectObject):
         # if self.currentStrike==2:
 
     def doPrayer(self):
-        if self.isAttacking == True:
-            print('already attacking')
+        if self.isPraying == True:
+            print('already praying')
 
             return
 
@@ -231,7 +234,7 @@ class Game(DirectObject):
         #         self.animSeq = None
         if self.speed != Vec3(0, 0, 0):
             self.playerM.setH(self.angle)
-        self.isAttacking = True
+        self.isPraying = True
         self.character.movementState = 'attacking'
         self.character.atkDir = 0
         no = random.randint(1, 2)
@@ -314,7 +317,7 @@ class Game(DirectObject):
 
         def atkFalse():
             self.isAttacking = False
-
+            self.isPraying = False
         a1 = self.playerM.actorInterval(
             anim, startFrame=0, endFrame=activeFrame
         )
@@ -332,7 +335,13 @@ class Game(DirectObject):
         hB = Func(self.attachHB, bone, node, shape)
         noHB = Func(self.detachHB, node)
 
-        self.animSeq = Sequence(a1, hB,active, atkF, c4q, buffer,noHB, fin)
+        self.animSeq = Sequence(a1,
+                                hB,
+                                active, 
+                                Parallel(atkF,noHB), 
+                                c4q, 
+                                buffer, 
+                                fin)
         self.animSeq.start()
 
     # def prayerAnim(self,anim):
@@ -368,8 +377,8 @@ class Game(DirectObject):
 
         ##
         # print(self.speed)
-        # self.footR = self.charM.expose_joint(None, 'modelRoot', 'foot.R')
-        # self.footL = self.charM.expose_joint(None, 'modelRoot', 'foot.L')
+        # self.footR = self.playerM.expose_joint(None, 'modelRoot', 'foot.R')
+        # self.footL = self.playerM.expose_joint(None, 'modelRoot', 'foot.L')
         HitB = CollisionCapsule(0, 0.5, 0, 0, 0, 0, 0.5)
         # self.footHB = self.foot.attachNewNode(CollisionNode('rightfoot'))
         node.reparentTo(parent)
@@ -394,6 +403,8 @@ class Game(DirectObject):
 
     def finishAction(self):
         self.atkQueue = None
+        self.isPraying=False
+        self.isAttacking=False
         self.character.movementState = 'endaction'
         if self.animSeq != None:
             self.animSeq.pause()
@@ -450,6 +461,7 @@ class Game(DirectObject):
                 self.speed != 0
                 and self.character.movementState == 'attacking'
                 and self.isAttacking == False
+                and self.isPraying == False
             ):
                 self.finishAction()
             # self.airDir= self.speed
@@ -468,7 +480,8 @@ class Game(DirectObject):
 
         self.processInput(dt)
 
-        # print('is attacking?', self.isAttacking)
+
+        print('is attacking?', self.isAttacking, 'isp[raying]?', self.isPraying)
 
         oldCharPos = self.character.getPos(render)
         self.character.setH(base.camera.getH(render))
@@ -500,7 +513,7 @@ class Game(DirectObject):
 
         # base.camera.setY(self.character.getY())
 
-        if char2cam.y<6 or char2cam.y> 15:
+        if char2cam.y<9 or char2cam.y> 15:
             ypos += delta.y
         if char2cam.x<-4 or char2cam.x> 4:
             xpos += delta.x
@@ -538,7 +551,7 @@ class Game(DirectObject):
 
         #camera
         self.camdummy = NodePath('camdummy')
-        base.cam.setPos(0, -8,2)
+        base.cam.setPos(0, -8,3)
         base.cam.setP(-7)
         
 
@@ -595,10 +608,13 @@ class Game(DirectObject):
         self.playerIdle = True
 
         self.isAttacking = False   # when this is false, dodges, movement, jumps end attack, asttacking
+        self.isPraying = False
         self.angle = 0
         self.playerAngle = 0
         self.animSeq = None
         self.currentStrike = 1
+
+        self.playerHBSetup()
 
         X = 0.3
         Y = 4.0
@@ -686,7 +702,111 @@ class Game(DirectObject):
                     i > 7,
                 )
             )
+            
+    def collisionSetup(self):
+        traverser = CollisionTraverser('collider')
+        base.cTrav = traverser
+        
+        self.collHandEvent = CollisionHandlerEvent()
+        self.playerATKNode = self.playerM.attachNewNode(CollisionNode('playeratk'))
+        self.playerParrynode = self.playerM.attachNewNode(CollisionNode('playerParry'))
 
+        traverser.addCollider(self.playerATKNode, self.collHandEvent)
+        traverser.addCollider(self.playerParrynode, self.collHandEvent)
+
+        #update this with collision events
+        for bodypart in self.playerHB: 
+            for enemy in self.enemies:
+                pass
+                # self.accept(f'{enemy.NP.name}attack-into-{bodypart.name}', self.takeHit, extraArgs=[bodypart.name, 
+                # self.accept(f'{enemy.NP.name}attack-into-pdodgecheck', self.pdodge,  extraArgs=[True])
+                # self.accept(f'{enemy.NP.name}attack-out-pdodgecheck', self.pdodge,  extraArgs=[False])
+    def playerHBSetup(self, HBvisible = True):
+
+        self.playerHB = []
+
+          
+       #positions for collision soluids
+        self.head = self.playerM.expose_joint(None, 'modelRoot', 'head')
+        self.chest = self.playerM.expose_joint(None, 'modelRoot', 'chest')
+        rightbicep= self.playerM.expose_joint(None, 'modelRoot', 'bicep.R')
+        # self.rightfoot = self.playerM.expose_joint(None, 'modelRoot', 'foot.R')
+        # self.leftfoot = self.playerM.expose_joint(None, 'modelRoot', 'foot.L')
+        rightforearm= self.playerM.expose_joint(None, 'modelRoot', 'forarm.R')
+        rightthigh = self.playerM.expose_joint(None, 'modelRoot', 'femur.R')
+        rightshin = self.playerM.expose_joint(None, 'modelRoot', 'shin.R')
+        leftbicep= self.playerM.expose_joint(None, 'modelRoot', 'bicep.L')
+        leftforearm= self.playerM.expose_joint(None, 'modelRoot', 'forarm.L')
+        leftthigh = self.playerM.expose_joint(None, 'modelRoot', 'femur.L')
+        leftshin = self.playerM.expose_joint(None, 'modelRoot', 'shin.L')
+
+        # collision solides
+        headHB = CollisionSphere(0,0,0, .1)
+        chestHB= CollisionSphere(0,.2,0,.4)
+        arm =  CollisionCapsule((0,-.2,0),(0,.8,0),0.07)
+        leg =  CollisionCapsule((0,-.38,0),(0,1,0),0.1)   
+
+        
+        #attach the solidss
+        self.headHB = self.head.attachNewNode(CollisionNode('playerhead'))
+        self.headHB.node().addSolid(headHB)
+        self.headHB.setZ(-.2)
+        # self.headHB.show()
+        self.playerHB.append(self.headHB)
+    
+        self.chestHB = self.chest.attachNewNode(CollisionNode('playerchest'))
+        self.chestHB.node().addSolid(chestHB)
+        self.chestHB.setY(-.2)
+        # self.chestHB.show()
+        self.playerHB.append(self.chestHB)
+        # self.chestHB.reparentTo(self.characterHB)
+    
+        self.bicepR = rightbicep.attachNewNode(CollisionNode('playerbicepr'))
+        self.bicepR.node().addSolid(arm)
+        # self.bicepR.show()
+        self.playerHB.append(self.bicepR)
+    
+        self.forarmR = rightforearm.attachNewNode(CollisionNode('playerforearmr'))
+        self.forarmR.node().addSolid(arm)
+        # self.forarmR.show()
+        self.playerHB.append(self.forarmR)
+    
+        self.thighR = rightthigh.attachNewNode(CollisionNode('playerthighr'))
+        self.thighR.node().addSolid(leg)
+        # self.thighR.show()
+        self.playerHB.append(self.thighR)
+        
+        self.shinR = rightshin.attachNewNode(CollisionNode('playershinr'))
+        self.shinR.node().addSolid(leg)
+        # self.shinR.show()
+        self.playerHB.append(self.shinR)
+    
+        self.bicepL = leftbicep.attachNewNode(CollisionNode('playerbicepl'))
+        self.bicepL.node().addSolid(arm)
+        # self.bicepL.show()
+        self.playerHB.append(self.bicepL)
+    
+        self.forarmL = leftforearm.attachNewNode(CollisionNode('playerforearml'))
+        self.forarmL.node().addSolid(arm)
+        # self.forarmL.show()
+        self.playerHB.append(self.forarmL)
+    
+        self.thighL = leftthigh.attachNewNode(CollisionNode('playerthighl'))
+        self.thighL.node().addSolid(leg)
+        # self.thighL.show()
+        self.playerHB.append(self.thighL)
+        
+        self.shinL = leftshin.attachNewNode(CollisionNode('playershinl'))
+        self.shinL.node().addSolid(leg)
+        # self.shinL.show()
+        self.playerHB.append(self.shinL)
+    
+        if HBvisible ==True:
+            for node in self.playerHB:
+                node.show()        
+    
+#         self.collHandEvent.addInPattern('%fn-into-%in') 
+#         self.collHandEvent.addOutPattern('%fn-out-%(tag)ih')
     def lvlSetup(self):
         self.lvl = self.worldNP.attachNewNode('lvl')
 
@@ -700,8 +820,16 @@ class Game(DirectObject):
         #     self.character.movementState == "jumping":
         #         if(currentAnim)!="jump":
         # print(self.character.movementState)
+
+    #####safety nets:    #
         if self.character.isOnGround() and self.character.movePoints!=3:
             self.character.movePoints=3
+        if self.character.movementState!='attacking':
+            if (self.isPraying==False 
+            and self.isAttacking==False):
+                # if self.attached == True:
+                    self.detachHB(self.playerATKNode)
+                    self.detachHB(self.playerParrynode)
 
         # set angle here
         self.angle = (
@@ -800,20 +928,8 @@ class Game(DirectObject):
         for vessel in self.vessels:
             vessel.update()
 
-    def collisionSetup(self):
-        traverser = CollisionTraverser('collider')
-        base.cTrav = traverser
-        
-        self.collHandEvent = CollisionHandlerEvent()
-        self.playerATKNode = self.playerM.attachNewNode(CollisionNode('playeratk'))
-        self.playerParrynode = self.playerM.attachNewNode(CollisionNode('playerParry'))
 
-        traverser.addCollider(self.playerATKNode, self.collHandEvent)
-        traverser.addCollider(self.playerParrynode, self.collHandEvent)
 
-        
-#         self.collHandEvent.addInPattern('%fn-into-%in') 
-#         self.collHandEvent.addOutPattern('%fn-out-%(tag)ih')
     def checkGhost(self, task):
         pass
         # ghost = self.ghost.node()
