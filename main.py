@@ -14,6 +14,7 @@ import time
 from typing import List
 
 import direct.directbase.DirectStart
+from direct.filter.CommonFilters import CommonFilters
 from direct.actor.Actor import Actor
 from direct.interval.ActorInterval import ActorInterval, LerpAnimInterval
 from direct.interval.IntervalGlobal import Func, Parallel, Sequence, Wait
@@ -56,6 +57,7 @@ globalClock.setMode(globalClock.MLimited)
 globalClock.setFrameRate(120.0)
 
 import simplepbr
+import gltf
 
 from kcc import PandaBulletCharacterController
 
@@ -64,14 +66,27 @@ class Game(DirectObject):
     def __init__(self):
 
         # now, x and y can be considered relative movements
+
+        self.shader = Shader.load(Shader.SL_GLSL, "sders/vert.vert", "sders/frag.frag")
         pipeline = simplepbr.init()
         pipeline.use_normal_maps = True
         pipeline.use_occlusion_maps = True
+        gltf.patch_loader(loader)
 
-        base.setBackgroundColor(0.1, 0.1, 0.8, 1)
+        base.setBackgroundColor(0, 0.1, 0, 1)
         base.setFrameRateMeter(True)
 
         
+
+
+        
+        # scene_filters = CommonFilters(base.win, base.cam)
+        # scene_filters.set_bloom()
+        # scene_filters.set_high_dynamic_range()
+        # scene_filters.set_exposure_adjust(1.1)
+        # scene_filters.set_gamma_adjust(1.1)
+
+
 
         ml.resolveMouse()
 
@@ -104,9 +119,42 @@ class Game(DirectObject):
         taskMgr.add(self.update, 'updateWorld')
 
         # Physics
+        self.storage = NodePath('storage') #non visible storage node
         self.setup()
 
-        self.atx = None   # keeping track of attacks for combo
+        render.clearLight()
+        ##----lights
+        sun = DirectionalLight("sun")
+        sun.set_color_temperature(10000)
+        sun.color = sun.color * 2
+        self.sun_path = render.attach_new_node(sun)
+        self.sun_path.set_pos(500, 0, 5)
+        self.sun_path.look_at(0, 0, 0)
+        self.worldNP.setLight(self.sun_path)
+        # self.sun_path.hprInterval(10.0, (self.sun_path.get_h(), self.sun_path.get_p() - 360, self.sun_path.get_r()), bakeInStart=True).loop()
+
+        sun.get_lens().set_near_far(1, 30)
+        sun.get_lens().set_film_size(20, 40)
+        sun.show_frustum()
+        sun.set_shadow_caster(True, 4096, 4096)
+
+        alight = AmbientLight("sky")
+                # alight.set_color(VBase4(skycol * 0.04, 1))
+        alight.set_color((.5,0.4,0.6,1))
+        alight_path = render.attach_new_node(alight)
+        # self.worldNP.set_light(alight_path)
+
+        plight_1 = PointLight('plight')
+        # add plight props here
+        plight_1_node = render.attach_new_node(plight_1)
+        # group the lights close to each other to create a sun effect
+        plight_1_node.set_pos(random.uniform(-21, -20), random.uniform(-21, -20), random.uniform(20, 21))
+        render.set_light(plight_1_node)
+
+        self.worldNP.setAttrib(LightRampAttrib.makeSingleThreshold(0, 0.5))
+
+        # render.setShader(self.shader)
+       
 
         # _____HANDLER_____
 
@@ -166,15 +214,16 @@ class Game(DirectObject):
         self.speed = 0
         self.character.movementState = 'dodging'
 
-        self.animSeq = Sequence()
+        # self.animSeq = Sequence()
 
     def doCrouch(self):
         self.character.startCrouch()
 
-    def doAttack(self):
+    def doAttack(self ):
         print('attack no', self.currentStrike)
-        if self.character.movementState in self.character.airStates:
+        if self.character.movementState in self.character.airStates: #or self.character.isOnGround()==False:
             return
+        
         # if self.currentStrike>=3:
         #     self.currentStrike =  1
         #     print('combo limit')
@@ -195,8 +244,12 @@ class Game(DirectObject):
                 self.animSeq = None
             # else:
 
-        if self.speed != Vec3(0, 0, 0):
-            self.playerM.setH(self.angle)
+        # if self.speed != Vec3(0, 0, 0):
+        #     self.playerM.setH(self.angle )
+        h=self.playerM.getH()
+        if self.speed!=(0,0,0):
+                h=self.angle
+        
         print('attacl no', self.currentStrike)
         # self.character.atkDir = self.playerM.getQuat().getForward() maybe set this during active frames
 
@@ -204,15 +257,15 @@ class Game(DirectObject):
         self.isAttacking = True
         self.character.movementState = 'attacking'
         if self.currentStrike == 1:
-            self.atkAnim('strike1', 4, 20,self.playerATKNode, self.handL, CollisionSphere(0,0,0,.5))
+            self.atkAnim('strike1', 4, 20,30,self.playerATKNode, self.handL, CollisionSphere(0,0,0,.5),h)
             self.currentStrike += 1
             return
         if self.currentStrike == 2:
-            self.atkAnim('strike2', 4, 20,self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5))
+            self.atkAnim('strike2', 4, 20,30,self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5),h)
             self.currentStrike += 1
             return
         if self.currentStrike == 3:
-            self.atkAnim('strike3', 4, 20,self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5))
+            self.atkAnim('strike3', 4, 20,30,self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5),h)
             self.currentStrike += 1
             #     return
         # if self.currentStrike==2:
@@ -234,6 +287,7 @@ class Game(DirectObject):
         #         self.animSeq = None
         if self.speed != Vec3(0, 0, 0):
             self.playerM.setH(self.angle)
+        h=self.playerM.getH()
         self.isPraying = True
         self.character.movementState = 'attacking'
         self.character.atkDir = 0
@@ -242,48 +296,14 @@ class Game(DirectObject):
             f'prayer{no}',
             4,
             16,
+            20,
             self.playerParrynode,
             self.playerM,
-            CollisionSphere(0,0,3,2)
+            CollisionSphere(0,0,3,2),
+            h,
+            prayer = True
         )
-        #     self.atkAnim('strike2', 4,8)
-        #     self.currentStrike +=1
-        #     return
-        # if self.currentStrike==3:
-        #     #  self.finishAction()
-        #     #  self.isAttacking = True
-        # #     self.character.movementState='attacking'
-        #     self.atkAnim('strike2', 14,18)
-        #     self.currentStrike +=1
-        #     return
 
-        #     def doSlashatk(self):
-        # if self.atx!=None and len(self.atx) >=4:
-        #     print('combo limit')
-        #     return
-
-        # # if self.character.movementState == 'dodging':
-
-        # # if self.character.movementState in self.character.airstates:# also if air attacking
-        #     # print('air attack x')
-        #     # self.smashAttack()
-        # if self.character.isAttacking == True and self.attackqueue>0:
-
-        #     # if self.attackQueued==True:
-        #     #     print('attack already queued')
-        #     if self.attackQueued ==False:
-        #         # print('queue attack x- do slash # ', self.attackqueue+1)
-        #         self.qdatk = 'slash'
-        #         self.attackQueued=True
-        # else:
-        #     # print('shouldnt get here if ur dodging....')
-        #     self.slashAttack()
-
-    # def queueStage(self,x, qud):
-    #     self.attackqueue = x
-    #     self.attackQueued = qud
-    #     # if qud==True:
-    #     #     self.attached = False
     def check4Queue(self):
         """if there is a queued attack, this will trigger it"""
         if self.character.movementState != 'attacking':
@@ -294,14 +314,18 @@ class Game(DirectObject):
 
             # self.finish()
             # if type == 'slash':
+            if self.speed!=(0,0,0):
+                h=self.angle
+            else:
+                h=self.playerM.getH()
             if self.currentStrike == 2:
-                self.atkAnim('strike2', 4, 20, self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5))
+                self.atkAnim('strike2', 4, 20,30, self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5),h)
                 self.isAttacking = True
                 self.currentStrike += 1
                 self.attackQueued = False
                 return
             if self.currentStrike == 3:
-                self.atkAnim('strike3', 4, 20,self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5))
+                self.atkAnim('strike3', 4, 20,30,self.playerATKNode, self.handR, CollisionSphere(0,0,0,.5),h)
                 self.isAttacking = True
                 self.currentStrike += 1
                 self.attackQueued = False
@@ -309,11 +333,13 @@ class Game(DirectObject):
             return
 
     # def atkAnim(self,order,)
-    def atkAnim(self, anim, activeFrame, bufferFrame, node, bone, shape):
+    def atkAnim(self, anim, activeFrame, bufferStart,bufferEnd, node, bone, shape, targetH, prayer = False):
 
         if self.animSeq is not None:  # end attack anim sequence
             if self.animSeq.isPlaying():
                 self.animSeq.pause()
+        
+            
 
         def atkFalse():
             self.isAttacking = False
@@ -322,12 +348,14 @@ class Game(DirectObject):
             anim, startFrame=0, endFrame=activeFrame
         )
         active = self.playerM.actorInterval(
-            anim, startFrame=activeFrame + 1, endFrame=bufferFrame
+            anim, startFrame=activeFrame + 1, endFrame=bufferStart
         )
         buffer = self.playerM.actorInterval(
-            anim, startFrame=bufferFrame + 1, endFrame=30
+            anim, startFrame=bufferStart + 1, endFrame=bufferEnd
         )
 
+
+        setH = LerpHprInterval(self.playerM, .1, (targetH,0,0))
         atkF = Func(atkFalse)
         fin = Func(self.finishAction)
         c4q = Func(self.check4Queue)
@@ -335,13 +363,35 @@ class Game(DirectObject):
         hB = Func(self.attachHB, bone, node, shape)
         noHB = Func(self.detachHB, node)
 
-        self.animSeq = Sequence(a1,
-                                hB,
-                                active, 
-                                Parallel(atkF,noHB), 
-                                c4q, 
-                                buffer, 
-                                fin)
+        if prayer == True:
+            def makeVis():
+                self.prayerFX.reparentTo(self.playerM) 
+            rp = Func(makeVis)
+            visual = Sequence( rp,
+                               LerpTexOffsetInterval(self.prayerFX, 1,(1,0),(0,0), textureStage=self.ts0))
+            prayer = Sequence(
+                                    Parallel(a1,setH),
+                                    hB,
+                                    active, 
+                                    noHB, ### MAYBE move atkf to end so ppl dont spam prayer
+                                    c4q, 
+                                    buffer,atkF,
+                                    fin)
+            self.animSeq =Parallel(visual,prayer)
+        else:
+
+            self.animSeq = Sequence(Parallel(a1,setH),
+                                    hB,
+                                    active, 
+                                    Parallel(atkF,noHB), 
+                                    c4q, 
+                                    buffer, 
+                                    fin)
+        
+        #fx for prayer
+        
+            
+
         self.animSeq.start()
 
     # def prayerAnim(self,anim):
@@ -406,6 +456,7 @@ class Game(DirectObject):
         self.isPraying=False
         self.isAttacking=False
         self.character.movementState = 'endaction'
+        self.prayerFX.reparentTo(self.storage)
         if self.animSeq != None:
             self.animSeq.pause()
             self.animSeq = None
@@ -481,7 +532,7 @@ class Game(DirectObject):
         self.processInput(dt)
 
 
-        print('is attacking?', self.isAttacking, 'isp[raying]?', self.isPraying)
+        # print('is attacking?', self.isAttacking, 'isp[raying]?', self.isPraying)
 
         oldCharPos = self.character.getPos(render)
         self.character.setH(base.camera.getH(render))
@@ -513,7 +564,7 @@ class Game(DirectObject):
 
         # base.camera.setY(self.character.getY())
 
-        if char2cam.y<9 or char2cam.y> 15:
+        if char2cam.y<9 or char2cam.y> 12:
             ypos += delta.y
         if char2cam.x<-4 or char2cam.x> 4:
             xpos += delta.x
@@ -528,7 +579,7 @@ class Game(DirectObject):
         if self.character.movementState != 'attacking':
             self.currentStrike = 1
             # print('state attacking', self.isAttacking, self.currentStrike)
-        # update enemy ai
+        # update enemy aijohn
         self.updateAi()
         self.updateSpirit()
 
@@ -541,6 +592,8 @@ class Game(DirectObject):
     def setup(self):
         self.worldNP = render.attachNewNode('World')
 
+        self.playerHP = 100
+
         # World
         self.debugNP = self.worldNP.attachNewNode(BulletDebugNode('Debug'))
         self.debugNP.show()
@@ -551,17 +604,31 @@ class Game(DirectObject):
 
         #camera
         self.camdummy = NodePath('camdummy')
-        base.cam.setPos(0, -8,3)
+        base.cam.setPos(0, -7,5)
         base.cam.setP(-7)
+
+        #hud TODO - make health an icon that changes from green to red
+        self.hud = TextNode('node name')
+        self.hud.setText(f"HP{self.playerHP}")
+        self.hudNP = aspect2d.attachNewNode(self.hud)
+        self.hudNP.setScale(0.07)
+        self.hudNP.setPos(-1.5,0,-.8)
         
 
-        # Ground
+########## lvl]
+
+
+
+        #ground
         shape = BulletPlaneShape(Vec3(0, 0, 1.0), 0)
 
         np = self.worldNP.attachNewNode(BulletRigidBodyNode('Ground'))
         np.node().addShape(shape)
         np.setPos(0, 0, 0)
         np.setCollideMask(BitMask32.allOn())
+
+        self.lvlSetup()
+
 
         cm = CardMaker('ground')
         cm.setFrame(-20, 20, -20, 20)
@@ -578,10 +645,12 @@ class Game(DirectObject):
         self.attackQueued = False
         self.attached = False
 
-        # player setup
+######## player setup
         self.character = PandaBulletCharacterController(
-            self.world, self.worldNP, 1.75, 1.3, 0.5, 0.4
+            self.world, self.worldNP, 1.75, 1.3, 0.5, 2
         )
+        
+
         self.character.setPos(render, Point3(0, 0, 0.5))
         self.playerM = Actor(
             'models/player/player.bam',
@@ -599,7 +668,34 @@ class Game(DirectObject):
                 'prayer2': 'models/player/player_pray2.bam',
             },
         )
+
+        #fx for prayer
+
+        self.ts0 = TextureStage('texstage0')
+        self.ts0.setTexcoordName("0")
+        self.ts0.setMode(TextureStage.MReplace)
+        self.ts0.setSort(0)
+
+        brushtex = loader.loadTexture('models/player/watercolorstrike.png')
+        self.prayerFX = loader.loadModel('models/player/prayerfx.glb')
+        self.prayerFX.clearTexture()
+        self.prayerFX.reparentTo(self.storage)
+
+        fxmat = Material("material")
+        fxmat.setEmission((1,1,1,1))
+        fxmat.setSpecular((1,1,1,0))
+
+        self.prayerFX.setMaterial(fxmat)
+        self.prayerFX.clearTexture()
+        self.prayerFX.setTransparency(True)
+        self.prayerFX.setTexture(self.ts0, brushtex,1)
+        self.prayerFX.setShader(self.shader)
+
         
+
+        self.playerATKNode = self.playerM.attachNewNode(CollisionNode('playeratk'))
+        self.playerParrynode = self.playerM.attachNewNode(CollisionNode('playerparry'))
+
         self.handR = self.playerM.expose_joint(None, 'modelRoot', 'Hand.R')
         self.handL = self.playerM.expose_joint(None, 'modelRoot', 'Hand.L')
 
@@ -607,12 +703,14 @@ class Game(DirectObject):
         self.playerM.reparentTo(self.character.movementParent)
         self.playerIdle = True
 
+        self.atx = None
         self.isAttacking = False   # when this is false, dodges, movement, jumps end attack, asttacking
         self.isPraying = False
         self.angle = 0
         self.playerAngle = 0
         self.animSeq = None
         self.currentStrike = 1
+        self.playerSA = 0 #poise value, increases with each attack
 
         self.playerHBSetup()
 
@@ -622,7 +720,7 @@ class Game(DirectObject):
 
         stepsY = 1.5
 
-        self.collisionSetup()
+        
 
         # shapesData = [
         #     dict(name = 'wall0', size = Vec3(X, Y, Z), pos = Point3(Y*2.0, -(Y + stepsY), Z), hpr = Vec3()),
@@ -702,29 +800,13 @@ class Game(DirectObject):
                     i > 7,
                 )
             )
-            
-    def collisionSetup(self):
-        traverser = CollisionTraverser('collider')
-        base.cTrav = traverser
-        
-        self.collHandEvent = CollisionHandlerEvent()
-        self.playerATKNode = self.playerM.attachNewNode(CollisionNode('playeratk'))
-        self.playerParrynode = self.playerM.attachNewNode(CollisionNode('playerParry'))
+        self.collisionSetup()
 
-        traverser.addCollider(self.playerATKNode, self.collHandEvent)
-        traverser.addCollider(self.playerParrynode, self.collHandEvent)
 
-        #update this with collision events
-        for bodypart in self.playerHB: 
-            for enemy in self.enemies:
-                pass
-                # self.accept(f'{enemy.NP.name}attack-into-{bodypart.name}', self.takeHit, extraArgs=[bodypart.name, 
-                # self.accept(f'{enemy.NP.name}attack-into-pdodgecheck', self.pdodge,  extraArgs=[True])
-                # self.accept(f'{enemy.NP.name}attack-out-pdodgecheck', self.pdodge,  extraArgs=[False])
     def playerHBSetup(self, HBvisible = True):
 
         self.playerHB = []
-
+        self.isHit = False
           
        #positions for collision soluids
         self.head = self.playerM.expose_joint(None, 'modelRoot', 'head')
@@ -808,7 +890,36 @@ class Game(DirectObject):
 #         self.collHandEvent.addInPattern('%fn-into-%in') 
 #         self.collHandEvent.addOutPattern('%fn-out-%(tag)ih')
     def lvlSetup(self):
-        self.lvl = self.worldNP.attachNewNode('lvl')
+        self.lvl = loader.loadModel('models/lvlunit01.glb')
+        self.lvl.reparentTo(render)
+        self.make_collision_from_model(self.lvl, 0,0,self.world,Point3(0,0,0))
+
+    def make_collision_from_model(self, input_model, node_number, mass, world, target_pos, ):
+        # tristrip generation from static models
+        # generic tri-strip collision generator begins
+        # return
+        geom_nodes = input_model.find_all_matches('**/+GeomNode')
+        geom_nodes = geom_nodes.get_path(node_number).node()
+        # print(geom_nodes)
+        geom_target = geom_nodes.get_geom(0)
+        # print(geom_target)
+        output_bullet_mesh = BulletTriangleMesh()
+        output_bullet_mesh.add_geom(geom_target)
+        tri_shape = BulletTriangleMeshShape(output_bullet_mesh, dynamic=False)
+        print(output_bullet_mesh)
+
+        body = BulletRigidBodyNode('input_model_tri_mesh')
+        np = render.attach_new_node(body)
+        np.node().add_shape(tri_shape)
+        np.node().set_mass(mass)
+        np.node().set_friction(0.01)
+        np.set_pos(target_pos)
+        np.set_scale(1)
+  
+    #     np.set_collide_mask(BitMask32.allOn())
+        np.set_collide_mask(BitMask32.bit(1))
+        world.attach_rigid_body(np.node())
+
 
     def updatePlayer(self):
         # if self.character.currentAction!=None:
@@ -831,6 +942,10 @@ class Game(DirectObject):
                     self.detachHB(self.playerATKNode)
                     self.detachHB(self.playerParrynode)
 
+        # 3playerpoise
+        self.playerSA = self.currentStrike
+        # print('player superarmor, ', self.playerSA)
+
         # set angle here
         self.angle = (
             math.degrees(math.atan2(-self.speed.x, self.speed.y))
@@ -838,19 +953,7 @@ class Game(DirectObject):
         # self.angle = self.angle % 360
         h = self.playerM.getH() % 360
 
-        def interAngle(angle):
-            # interpolates player angle
-            self.angle = math.degrees(angle)
-            self.angle = self.angle % 360
-            h = self.playerM.getH() % 360
 
-            # print(self.playerAngle,abs(self.playerAngle-self.angle))
-            if abs(self.playerAngle - self.angle) < 11:
-                return
-            if self.angle > h:
-                self.playerAngle += 20
-            if self.angle < h:
-                self.playerAngle -= 20
 
         def rotate_character(current_angle, new_angle):
             if abs(new_angle - current_angle) > 180:
@@ -932,11 +1035,93 @@ class Game(DirectObject):
 
     def checkGhost(self, task):
         pass
+
+
+    ###### Collision events here
+    def collisionSetup(self):
+        traverser = CollisionTraverser('collider')
+        base.cTrav = traverser
+        
+        
+        self.collHandEvent = CollisionHandlerEvent()
+        self.collHandEvent.addInPattern('%fn-into-%in')     
+
+        traverser.addCollider(self.playerATKNode, self.collHandEvent)
+        traverser.addCollider(self.playerParrynode, self.collHandEvent)
+
+        for vessel in self.vessels:
+            traverser.addCollider(vessel.lclaw_hitbox,self.collHandEvent)
+            traverser.addCollider(vessel.rclaw_hitbox,self.collHandEvent)
+
+    #     self.collisionEvents()
+    # def collisionEvents(self):
+
+        # print('svessels',self.vessels[0].)
+        #possessed hits p[layer]     
+        print(self.playerHB)  
+        for bodypart in self.playerHB: 
+            
+                # self.accept()
+            for enemy in self.vessels:
+                self.accept(f'{enemy.name}clawL-into-{bodypart.name}', self.takeHit, extraArgs=[enemy])
+                self.accept(f'{enemy.name}clawR-into-{bodypart.name}', self.takeHit, extraArgs=[enemy])
+                # self.accept(f'{enemy.NP.name}attack-out-pdodgecheck', self.pdodge,  extraArgs=[False])
+                self.accept(f'{enemy.name}clawL-into-playerparry', self.parryEnemy, extraArgs=[enemy])
+                self.accept(f'{enemy.name}clawR-into-playerparry', self.parryEnemy, extraArgs=[enemy])
+        
+        #player hits possessed
+        for vessel in self.vessels:
+            #  self.accept(f'playeratk-into-{vessel.name}hitbox', self.hitEnemy, extraArgs=[enemy])
+            for bodyPart in vessel.HB:
+                self.accept(f'playeratk-into-{bodyPart.name}', self.hitEnemy, extraArgs=[enemy])
+       
+        #player parries possessed
+
+        #player parries spirit
+
+    def takeHit(self,enemy, entry):
+        
+        if self.isHit  == True:
+            return
+        self.isHit = True
+        print(enemy.name, 'hits player', entry)
+        # if player ss> enemysa, wait .5 sec, self.ishit = False
+        #else, play take hit anim, ishit = False
+        if enemy.SA < self.playerSA:
+            print('player is hit butdoes not stagger')
+            
+        if enemy.SA > self.playerSA:
+            print('player is hit and staggers')
+        #do sequence, ishit is false at the end
+    def hitEnemy(self, enemy, entry):
+        #if possesed m= flase return
+        if enemy.isHit==True:
+            return
+        enemy.isHit = True
+        # print('player hits', enemy.name, entry)
+        if enemy.SA > self.playerSA:
+            print('enemy is hit butdoes not stagger')
+        if enemy.SA < self.playerSA:
+            print('enemy is hit and staggers')
+        #do sequence, ishit is false at the end
+    
+    def parryEnemy(self, enemy, entry):
+       
+        if self.isHit  == True:
+            return
+        self.isHit = True
+        print('player deflects', enemy.name)
+
+    def parrySpirit(self, spirit,entry):
+        print('parried spirtitr')
         # ghost = self.ghost.node()
         # for node in ghost.getOverlappingNodes():
         #     print ("Ghost collides with", node)
         # return task.cont
 
+    def spiritPossesses(self,entry,spirit,vessel):
+        pass
+    
     # def updatePlayer(self):
 
     #     else:

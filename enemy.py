@@ -1,13 +1,19 @@
 import random
 
+
+
 from direct.actor.Actor import Actor
 from direct.showbase.ShowBase import ShowBase
+from direct.interval.ActorInterval import ActorInterval, LerpAnimInterval
+from direct.interval.IntervalGlobal import Func, Parallel, Sequence, Wait
+from direct.interval.LerpInterval import *
 from panda3d.ai import AICharacter, AIWorld
-from panda3d.bullet import (BulletCylinderShape, BulletRigidBodyNode,
-                            BulletWorld, ZUp)
-from panda3d.core import (BitMask32, CollisionNode, CollisionSphere, NodePath,
-                          Vec3)
-
+# from panda3d.bullet import (BulletCylinderShape, BulletRigidBodyNode,
+#                             BulletWorld, ZUp)
+# from panda3d.core import (BitMask32, CollisionNode, CollisionSphere, NodePath,
+#                           Vec3)
+from panda3d.bullet import *
+from panda3d.core import *
 CYLINDER_SHAPE = BulletCylinderShape(0.5, 2.4, ZUp)
 
 Z_OUT_OF_BOUNDS = -1000
@@ -38,10 +44,11 @@ class Vessel:
         world.attachRigidBody(self.body.node())
 
         self.vessel_model = Actor(
-            'johnooi/johnooi.bam',
+            'models/johnooi.bam',
             {
-                'idle': 'johnooi/johnooi_Idle.bam',
-                'walk': 'johnooi/johnooi_walk.bam',
+                'idle': 'models/johnooi_Idle.bam',
+                'walk': 'models/johnooi_walk.bam',
+                'stationary': 'models/johnooi/johnooi_scared1.bam'
             },
         )
         self.vessel_model.setHpr(180, 0, 0)
@@ -52,15 +59,17 @@ class Vessel:
         self.vessel_model.loop('walk')
 
         self.possessed_model = Actor(
-            'models/possessed.bam',
+            'possessed/possessed.bam',
             {
-                'spawn': 'models/possessed_spawn.bam',
-                'run': 'models/possessed_run.bam',
-                'slash1': 'models/possessed_slash1.bam',
-                'slash2': 'models/possessed_slash2.bam',
-                'stab': 'models/possessed_stab.bam',
-                'deflected': 'models/possessed_deflected.bam',
-                'death': 'models/possessed_death.bam',
+                'spawn': 'possessed/possessed_spawn.bam',
+                'run': 'possessed/possessed_run.bam',
+                'slash1': 'possessed/possessed_slash1.bam',
+                'slash2': 'possessed/possessed_slash2.bam',
+                'stab': 'possessed/possessed_stab.bam',
+                'recoil' :'possessed/possessed_recoil1.bam',#play this before deflected
+                'deflected': 'possessed/possessed_deflected.bam',
+                'death': 'possessed/possessed_death.bam',
+                'stagger': 'possessed/possessed_stagger.bam'
             },
         )
         self.possessed_model.setHpr(180, 0, 0)
@@ -84,21 +93,30 @@ class Vessel:
         self.lclaw_model.setPos(0, 0, 0)
         self.lclaw_model.setScale(0.3)
 
-        self.hitbox = self.body.attachNewNode(CollisionNode('hit'))
-        sphere = CollisionSphere(0, 0, 0, 1)
-        self.hitbox.node().addSolid(sphere)
 
-        sphere = CollisionSphere(0, 2, 0, 1.5)
+        self.HP = 100
+        #TODO placeholder hb, switch to self.HB
+        # self.hitbox = self.possessed_model.attachNewNode(CollisionNode(f'{self.name}hitbox'))
+        # sphere = CollisionSphere(0, 0, 2, 2)
+        # self.hitbox.node().addSolid(sphere)
+
+        # print(self.hitbox)
+
+########  only attach during active frames of atrk anim
+        sphere = CollisionSphere(0, 2, 0, 2)
         self.lclaw_hitbox = self.lclaw_model.attachNewNode(
-            CollisionNode('claw_hit')
+            CollisionNode(f'{self.name}clawL')
         )
         self.lclaw_hitbox.node().addSolid(sphere)
         self.rclaw_hitbox = self.rclaw_model.attachNewNode(
-            CollisionNode('claw_hit')
+            CollisionNode(f'{self.name}clawR')
         )
         self.rclaw_hitbox.node().addSolid(sphere)
 
         # TODO: rm, debug only to show hitbox
+        # self.hitbox.show()
+        self.atkHB = [self.rclaw_hitbox, self.lclaw_hitbox]
+
         # self.hitbox.show()
         self.lclaw_hitbox.show()
         self.rclaw_hitbox.show()
@@ -115,7 +133,128 @@ class Vessel:
         }
 
         self.is_possessed = is_possessed
+
         self.state = 'pursue'
+
+
+        self.vesselBehavior = random.randint(1,2)# 1= wander, 2 = idle/scared
+        ### hitboxes AND ATtasck stuff] for when possessed
+
+
+
+        self.SA = 0 #super armor count - increases with successive atx
+        self.isHit = False
+
+        self.HB = []
+        self.HBsetup(self.possessed_model,self.HB,True,self.name)
+
+    def HBsetup(self, actor, HBlist,visible,name):
+            """set up hitbox for taking damage"""
+            # print(self.charM.listJoints())
+            head = actor.expose_joint(None, 'modelRoot', 'head')
+            chest = actor.expose_joint(None, 'modelRoot', 'chest')
+            rightbicep= actor.expose_joint(None, 'modelRoot', 'bicep.R')
+            rightforearm= actor.expose_joint(None, 'modelRoot', 'forarm.R')
+            rightthigh = actor.expose_joint(None, 'modelRoot', 'femur.R')
+            rightshin = actor.expose_joint(None, 'modelRoot', 'shin.R')
+            leftbicep= actor.expose_joint(None, 'modelRoot', 'bicep.L')
+            leftforearm= actor.expose_joint(None, 'modelRoot', 'forarm.L')
+            leftthigh = actor.expose_joint(None, 'modelRoot', 'femur.L')
+            leftshin = actor.expose_joint(None, 'modelRoot', 'shin.L')
+
+            # print(self.head.getPos(render))
+            headsphere = CollisionSphere(0,0,0, .1)
+            chestsphere= CollisionSphere(0,.2,0,.75)
+            arm =  CollisionCapsule((0,-.2,0),(0,.8,0),0.07)
+            leg =  CollisionCapsule((0,-.38,0),(0,1,0),0.1)
+            # forearm =  CollisionCapsule((0,-.2,0),(0,.8,0),0.07)
+            # self.characterHitB = self.character.movementParent.attachNewNode(CollisionNode('character'))
+
+            # self.characterHB = []
+
+            # self.headHB = self.characterHitB.attachNewNode(CollisionNode('head'))
+            # self.headHB.reparentTo(self.characterHitB)
+            # self.headHB.node().addSolid(headHB)       
+            # self.headHB.show()
+            # self.characterHB.append(self.headHB)
+            # self.headHB.setCompass(self.head)
+            # self.headHB.setPos(self.head, 0,0,7)
+            # self.characterHitB.show()
+
+            headHB = head.attachNewNode(CollisionNode(f'{name}head'))
+            headHB.node().addSolid(headsphere)
+            headHB.setZ(-.2)
+            # self.headHB.show()
+            HBlist.append(headHB)
+            # self.headHB.wrtReparentTo(self.characterHitB)
+
+            
+
+            chestHB = chest.attachNewNode(CollisionNode(f'{name}chest'))
+            chestHB.node().addSolid(chestsphere)
+            chestHB.setY(-.2)
+            # self.chestHB.show()
+            HBlist.append(chestHB)
+            # self.chestHB.reparentTo(self.characterHB)
+
+            self.bicepR = rightbicep.attachNewNode(CollisionNode(f'{name}bicepr'))
+            self.bicepR.node().addSolid(arm)
+            # self.bicepR.show()
+            HBlist.append(self.bicepR)
+
+            self.forarmR = rightforearm.attachNewNode(CollisionNode(f'{name}forearmr'))
+            self.forarmR.node().addSolid(arm)
+            # self.forarmR.show()
+            HBlist.append(self.forarmR)
+
+            self.thighR = rightthigh.attachNewNode(CollisionNode(f'{name}thighr'))
+            self.thighR.node().addSolid(leg)
+            # self.thighR.show()
+            HBlist.append(self.thighR)
+            
+            self.shinR = rightshin.attachNewNode(CollisionNode(f'{name}shinr'))
+            self.shinR.node().addSolid(leg)
+            # self.shinR.show()
+            HBlist.append(self.shinR)
+
+            self.bicepL = leftbicep.attachNewNode(CollisionNode(f'{name}bicepl'))
+            self.bicepL.node().addSolid(arm)
+            # self.bicepL.show()
+            HBlist.append(self.bicepL)
+
+            self.forarmL = leftforearm.attachNewNode(CollisionNode(f'{name}forearml'))
+            self.forarmL.node().addSolid(arm)
+            # self.forarmL.show()
+            HBlist.append(self.forarmL)
+
+            self.thighL = leftthigh.attachNewNode(CollisionNode(f'{name}thighl'))
+            self.thighL.node().addSolid(leg)
+            # self.thighL.show()
+            HBlist.append(self.thighL)
+            
+            self.shinL = leftshin.attachNewNode(CollisionNode(f'{name}shinl'))
+            self.shinL.node().addSolid(leg)
+            # self.shinL.show()
+            HBlist.append(self.shinL)
+
+            if visible ==True:
+                for node in HBlist:
+                    node.show()
+    
+    def stagger(self):
+        """plays staggered anim thru when enemy is hit and player superarmor is greter than itself"""
+        self.isHit= True
+        if self.is_playing_any('staggered'):
+            return
+        self.possessed_model.play('staggered')
+        self.taskMgr.doMethodLater(
+            self.possessed_model.getDuration('staggered'),
+
+        )
+        
+        self.state = 'staggered'
+
+    
 
     def is_playing_any(self, *anims):
         current_anim = self.possessed_model.getCurrentAnim()
@@ -181,11 +320,40 @@ class Vessel:
     def attack_post(self, task=None):
         self.attack() if self.is_player_in_range() else self.pursue_player()
 
+    def vessel_wander(self):
+        self.aiBehaviors.wander()
+        # if self.is_playing_any('walk'):
+        #     return
+        if self.vessel_model.getCurrentAnim()=='walk':
+            return
+        self.vessel_model.loop('walk')
+    
+    def vessel_stationary(self):
+        # if self.is_playing_any('stationary'):
+        #     return
+        # print(self.vessel_model.getCurrentAnim())
+        if self.vessel_model.getCurrentAnim()=='stationary':
+           
+            return
+        self.vessel_model.loop('stationary')
+
     def update(self, task=None):
+        
+        self.body.setP(0)
+        self.body.setR(0)
         if not self.is_possessed:
-            self.aiBehaviors.wander()
+            # self.aiBehaviors.wander()
+            update_vessel = {
+                            1 : self.vessel_wander,
+                            2 : self.vessel_stationary
+            }   
+            update_vessel[self.vesselBehavior]()
             return
 
+        #wait for staggered anim to finish
+        if self.state == 'staggered':
+            return
+        
         # wait for attack to finish
         if self.state == 'attack':
             return
@@ -213,3 +381,43 @@ class Vessel:
         else:
             self.possessed_model.setZ(Z_OUT_OF_BOUNDS)
             self.vessel_model.setZ(-1.2)
+
+class HealthBar(NodePath):
+    def __init__(self, pos):
+        NodePath.__init__(self, 'healthbar')
+
+
+        # self.postureBar(pos = (-1,1,0.6, .8))
+
+        self.setShaderAuto()
+        cmfg = CardMaker('fg')
+        # cmfg.setFrame(-1, 1, -0.1, 0.1)
+        cmfg.setFrame(pos)
+        self.fg = self.attachNewNode(cmfg.generate())
+
+        cmbg = CardMaker('bg')
+        # cmbg.setFrame(-1, 1, -0.1, 0.1)
+        cmbg.setFrame(pos)
+        self.bg = self.attachNewNode(cmbg.generate())
+        self.bg.setPos(1, 0, 0)
+
+        self.fg.setColor(1, 0.5, 0, 1)
+        self.bg.setColor(0.5, 0.5, 0.5, 1)
+
+        self.setHealth(1.0)#, full = True)
+
+
+    def setHealth(self, value):#, full = False):
+        # if value ==1:
+        #         value =.999
+        # i
+        # f value ==0:
+        #         value =.001
+        offset = 1.0-value
+
+        self.fg.setScale(value, 1, 1)
+        self.bg.setScale(offset, 1, 1)
+
+        
+        self.fg.setPos(-offset,0,0)
+        self.bg.setPos(1-offset,0,0)
