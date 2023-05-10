@@ -1078,7 +1078,8 @@ class Game(DirectObject):
         #player parries possessed
 
         #player parries spirit
-
+    def hitCheck(self, who, v):
+        who.isHit=v
     def takeHit(self,enemy, entry):
         
         if self.isHit  == True:
@@ -1099,11 +1100,45 @@ class Game(DirectObject):
             return
         enemy.isHit = True
         # print('player hits', enemy.name, entry)
-        if enemy.SA > self.playerSA:
+        p=None
+        r=None
+        def end():
+            self.hitcontact=False
+            enemy.isHit =False
+            enemy.state = 'pursue'#maybe add a buffer state
+        if self.animSeq!=None:
+            p = Func(self.animSeq.pause)#### player hitstopping
+            r = Func(self.animSeq.resume)
+        if self.animSeq==None:
+            def noseq():
+                pass
+            p = Func(noseq)
+            r = Func(noseq)
+        e =Func(end)
+        if enemy.SA >= self.playerSA:
             print('enemy is hit butdoes not stagger')
+            def twitch(p):
+           
+                torso=enemy.model.controlJoint(None, "modelRoot", "torso")
+                torso.setP(p)
+            
+               #stop = Func(enemy.model.stop())#enemy anim stop
+            a = Func(twitch, 30)
+            b = Func(twitch, 0)
+            
+            hitseq =Sequence(a, p, Wait(.1),b, r,e)
+
         if enemy.SA < self.playerSA:
             print('enemy is hit and staggers')
+            hitStop = Sequence(p, Wait(.1), r)
+            anim = enemy.possessed_model.actorInterval('stagger')
+            hitseq =Sequence(Parallel(hitStop, anim),e)
         #do sequence, ishit is false at the end
+
+
+        hitseq.start()
+            # if enemy.health<=0:
+            #     self.enemydeath(enemy)
     
     def parryEnemy(self, enemy, entry):
        

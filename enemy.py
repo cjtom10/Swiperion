@@ -15,6 +15,7 @@ from panda3d.ai import AICharacter, AIWorld
 from panda3d.bullet import *
 from panda3d.core import *
 CYLINDER_SHAPE = BulletCylinderShape(0.5, 2.4, ZUp)
+CAPSULE_SHAPE = BulletCapsuleShape(0.5, 2.4, ZUp)
 
 Z_OUT_OF_BOUNDS = -1000
 
@@ -33,15 +34,20 @@ class Vessel:
         self.taskMgr = taskMgr
         self.name = name
 
-        self.body = worldNP.attachNewNode(BulletRigidBodyNode('Cylinder'))
-        self.body.node().setMass(1.0)
-        self.body.node().addShape(CYLINDER_SHAPE)
+        # self.body = worldNP.attachNewNode(BulletRigidBodyNode('Cylinder'))
+        controller = BulletCharacterControllerNode(CYLINDER_SHAPE,1,'npc')
+        self.body = worldNP.attachNewNode(controller)
+        # self.body.node().setMass(1.0)
+        # self.body.node().addShape(CYLINDER_SHAPE)
+        # self.body.node().addShape(CAPSULE_SHAPE)
         self.body.setPos(
             random.randrange(-20, 20), random.randrange(30, 50), 3
         )
         self.body.setHpr(0, 0, 0)
         self.body.setCollideMask(BitMask32.allOn())
-        world.attachRigidBody(self.body.node())
+        # self.body.setCollideMask(BitMask32.allOn())
+        # world.attachRigidBody(self.body.node())
+        world.attachCharacter(self.body.node())
 
         self.vessel_model = Actor(
             'models/johnooi.bam',
@@ -54,7 +60,7 @@ class Vessel:
         self.vessel_model.setHpr(180, 0, 0)
         self.vessel_model.loop('idle')
         self.vessel_model.reparentTo(self.body)
-        self.vessel_model.setZ(-1.2)
+        # self.vessel_model.setZ(-1.2)
         self.vessel_model.setScale(0.6)
         self.vessel_model.loop('walk')
 
@@ -107,11 +113,11 @@ class Vessel:
         self.lclaw_hitbox = self.lclaw_model.attachNewNode(
             CollisionNode(f'{self.name}clawL')
         )
-        self.lclaw_hitbox.node().addSolid(sphere)
+        # self.lclaw_hitbox.node().addSolid(sphere)
         self.rclaw_hitbox = self.rclaw_model.attachNewNode(
             CollisionNode(f'{self.name}clawR')
         )
-        self.rclaw_hitbox.node().addSolid(sphere)
+        # self.rclaw_hitbox.node().addSolid(sphere)
 
         # TODO: rm, debug only to show hitbox
         # self.hitbox.show()
@@ -144,6 +150,7 @@ class Vessel:
 
         self.SA = 0 #super armor count - increases with successive atx
         self.isHit = False
+        self.currentSeq = None
 
         self.HB = []
         self.HBsetup(self.possessed_model,self.HB,True,self.name)
@@ -278,10 +285,44 @@ class Vessel:
         self.possessed_model.loop('run')
 
     def attack(self, task=None):
+        
+        self.aiBehaviors.pauseAi('pursue')
         attack = random.choice(list(self.attack_methods.keys()))
         self.attack_methods[attack]()
         self.state = 'attack'
 
+    def attack_anim(self, anim, aFramestart, aFrameend,finalframe,Hand):
+        
+        a1 = self.possessed_model.actorInterval(anim,
+                                                startFrame=0, 
+                                                endFrame=aFramestart)
+        
+        a2 = self.possessed_model.actorInterval(anim,
+                                                startFrame=aFramestart+1, 
+                                                endFrame=aFrameend)
+        animfin = self.possessed_model.actorInterval(anim,
+                                                startFrame=aFrameend+1, 
+                                                endFrame=finalframe
+                                                )
+        def attachHb():
+            sphere = CollisionSphere(0, 0, 2, 2)
+            # self.rclaw_hitbox.node().addSolid(sphere)
+            Hand.node().addSolid(sphere)
+            # self.lclaw_hitbox.node().addSolid(sphere)
+        def detachHB():
+            # self.rclaw_hitbox.node().clearSolids()
+            # self.lclaw_hitbox.node().
+            Hand.clearSolids()
+        attach = Func(attachHb)
+        detach = Func(detachHB)    
+
+        self.currentSeq=Sequence(a1,
+                                 attach,
+                                 a2,
+                                 detach,
+                                 animfin
+                                 )
+        self.currentSeq.start()
     def slash1(self):
         if self.is_playing_any('slash1'):
             return
@@ -320,6 +361,10 @@ class Vessel:
     def attack_post(self, task=None):
         self.attack() if self.is_player_in_range() else self.pursue_player()
 
+    def possessed_death(self):
+        #possessed dies and vessel retuyrns, spirit spawns in place
+        pass
+
     def vessel_wander(self):
         self.aiBehaviors.wander()
         # if self.is_playing_any('walk'):
@@ -341,6 +386,8 @@ class Vessel:
         
         self.body.setP(0)
         self.body.setR(0)
+        # self.body.setZ(render,1) #because mass is 0, otherwise they will phase thru geom
+
         if not self.is_possessed:
             # self.aiBehaviors.wander()
             update_vessel = {
@@ -366,6 +413,7 @@ class Vessel:
             self.pursue_player()
         else:
             self.attack()
+
 
     @property
     def is_possessed(self):
