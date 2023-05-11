@@ -261,7 +261,11 @@ class Vessel:
         
         self.state = 'staggered'
 
-    
+    def idle(self): 
+        self.aiBehaviors.pauseAi('pursue')
+        if self.is_playing_any('idle'):
+            return
+        self.possessed_model.loop('idle')
 
     def is_playing_any(self, *anims):
         current_anim = self.possessed_model.getCurrentAnim()

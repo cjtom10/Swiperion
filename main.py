@@ -797,7 +797,7 @@ class Game(DirectObject):
                     self.world,
                     self.aiWorld,
                     self.playerM,
-                    i > 7,
+                    i > 8,
                 )
             )
         self.collisionSetup()
