@@ -1,3 +1,4 @@
+import math
 import random
 
 from direct.actor.Actor import Actor
@@ -36,8 +37,6 @@ class Vessel:
         # self.body = worldNP.attachNewNode(BulletRigidBodyNode('Cylinder'))
         controller = BulletCharacterControllerNode(CYLINDER_SHAPE, 1, 'npc')
         self.body = worldNP.attachNewNode(controller)
-        self.trackingNode =loader.loadModel('spirit/spirit.bam')
-        self.trackingNode.reparentTo(worldNP)
         # self.body.node().setMass(1.0)
         # self.body.node().addShape(CYLINDER_SHAPE)
         # self.body.node().addShape(CAPSULE_SHAPE)
@@ -64,8 +63,6 @@ class Vessel:
         # self.vessel_model.setZ(-1.2)
         self.vessel_model.setScale(0.6)
         self.vessel_model.loop('walk')
-
-        
 
         self.possessed_model = Actor(
             'possessed/possessed.bam',
@@ -152,8 +149,6 @@ class Vessel:
         self.SA = 0   # super armor count - increases with successive atx
         self.isHit = False
         self.currentSeq = None
-
-        self.d2player = 0
 
         self.HB = []
         self.HBsetup(self.possessed_model, self.HB, True, self.name)
@@ -257,7 +252,7 @@ class Vessel:
         """plays staggered anim thru when enemy is hit and player superarmor is greter than itself"""
         for claw in self.atkHB:
             claw.node().clearSolids()
-        
+
         self.isHit = True
         if self.is_playing_any('staggered'):
             return
@@ -267,10 +262,11 @@ class Vessel:
         )
 
         self.state = 'staggered'
+
     def deflected(self):
         for claw in self.atkHB:
             claw.node().clearSolids()
-        
+
     def idle(self):
         self.aiBehaviors.pauseAi('pursue')
         if self.is_playing_any('idle'):
@@ -283,14 +279,24 @@ class Vessel:
         current_anim = self.possessed_model.getCurrentAnim()
         return any(current_anim == anim for anim in anims)
 
-    def is_player_in_range(self, distance: int = 3):
+    @property
+    def d2p(self):
         player_pos = self.player.getPos(render)
         vessel_pos = self.possessed_model.getPos(render)
-        self.d2player = (player_pos - vessel_pos).length() 
-        return self.d2player <= distance
+        return (player_pos - vessel_pos).length()
+
+    def rotate_to_face_player(self):
+        direction_to_player = (
+            self.player.getPos() - self.possessed_model.getPos()
+        )
+        heading = math.atan2(
+            direction_to_player.getY(), direction_to_player.getX()
+        )
+        self.possessed_model.setH(math.degrees(heading) + 180)
 
     def pursue_player(self, task=None):
         self.state = 'pursue'
+        self.rotate_to_face_player()
         self.aiBehaviors.pursue(self.player)
         if self.possessed_model.getCurrentAnim() == 'run':
             return
@@ -302,15 +308,29 @@ class Vessel:
     #     if self.is_playing_any('run'):
     #         return
     #     self.aiBehaviors.pursue(self.player)
-        
+
     #     self.possessed_model.loop('run')
 
     def strafe(self):
         self.state = 'strafe'
         self.aiBehaviors.pauseAi('pursue')
-        self.possessed_model.setH(self.trackingNode.getH())
 
-        #set speed left right watever
+        choice = random.random()
+        dir_to_player = self.player.getPos() - self.body.getPos()
+        norm_dir = dir_to_player.normalized()
+        strafe_distance = 0.3
+        step_distance = 0.05
+
+        if choice < 0.2:
+            strafe_vector = LVector3(norm_dir.getZ(), -norm_dir.getX(), 0)
+            self.body.setPos(
+                self.body.getPos() + strafe_vector * strafe_distance
+            )
+        # elif 0.6 <= choice < 0.8:
+        #     self.body.setPos(self.body.getPos() + norm_dir * step_distance)
+        # else:
+        #     self.body.setPos(self.body.getPos() - norm_dir * step_distance)
+        self.rotate_to_face_player()
 
     def attack(self, task=None):
         # not using this anymore
@@ -397,10 +417,10 @@ class Vessel:
         self.state = 'pursue'
 
     def slash1_post(self, task=None):
-        self.slash2() if self.is_player_in_range() else self.pursue_player()
+        self.slash2() if self.d2p < 1 else self.pursue_player()
 
     def attack_post(self, task=None):
-        self.slash1() if self.is_player_in_range() else self.pursue_player()
+        self.slash1() if self.d2p < 1 else self.pursue_player()
 
     def possessed_death(self):
         # possessed dies and vessel retuyrns, spirit spawns in place
@@ -423,27 +443,19 @@ class Vessel:
             return
         self.vessel_model.loop('stationary')
 
-    def updateTracking(self):
-        """so the enemy faces the player when in range"""
-        self.trackingNode.setPos(self.body.getPos(render))
-        self.trackingNode.lookAt(self.player)
-        # print(self.trackingNode.getH(render))
-
     def update(self, task=None):
-        
 
-        self.updateTracking()
         self.body.setP(0)
         self.body.setR(0)
         # self.body.setZ(render,1) #because mass is 0, otherwise they will phase thru geom
-        
+
         if not self.is_possessed:
             # self.aiBehaviors.wander()
-            self.state = "notPosessed"
+            self.state = 'notPosessed'
             update_vessel = {1: self.vessel_wander, 2: self.vessel_stationary}
             update_vessel[self.vesselBehavior]()
             return
-        print(self.name,'STATE', self.state)
+        print(self.name, 'STATE', self.state)
         # wait for staggered anim to finish
         if self.state == 'staggered':
             return
@@ -453,12 +465,11 @@ class Vessel:
             self.aiBehaviors.pauseAi('pursue')
             return
 
-        if self.is_player_in_range():
-            # self.slash1()
-            print(self.name, 'is near player: ', self.d2player)
+        if self.d2p < 2:
+            self.slash1()
+            self.attack()
+        elif self.d2p <= 2.5:
             self.strafe()
-            # self.idle()
-            # self.attack()
         else:
             self.pursue_player()
 
