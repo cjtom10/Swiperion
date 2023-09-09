@@ -1,0 +1,13 @@
+{
+    "lockondist": 100,
+    "nya": {
+        "host": "nya",
+        "port": 44
+    },
+    "api_key": "myapikey123",
+    "debug_mode": true,
+    "attack1": {"name":"anim1",
+                "activeframes": [4,5 ]},
+    "jumpheight": 3
+
+}

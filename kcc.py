@@ -20,7 +20,7 @@ class PandaBulletCharacterController(object):
     The controller is composed of a levitating capsule (allowing stepping), a kinematic body and numerous raycasts accounting for levitation and spacial awareness.
     The elements are set up automatically.
     """
-    def __init__(self, world, parent, walkHeight, crouchHeight, stepHeight, radius, gravity=None):
+    def __init__(self, world, parent, walkHeight, crouchHeight, stepHeight, radius, model,gravity=None):
         """
         World -- (BulletWorld) the Bullet world.
         Parent -- (NodePath) where to parent the KCC elements
@@ -45,6 +45,7 @@ class PandaBulletCharacterController(object):
         self.setActiveJumpLimiter(True)
         
         self.movementState = "ground"
+        self.previosState = "ground"
         self.movementStateFilter = {
             "ground": ["ground", "jumping", "falling","attacking","dodging", "prayer" ],
             "jumping": ["ground", "falling", "jumping", ],
@@ -63,9 +64,11 @@ class PandaBulletCharacterController(object):
         # It doesn't work right now because I can't figure out how to add sliding. Sweep test could work, but it would cause problems with penetration testing and steps
         # That said, you probably won't need it, if you design your levels correctly
         
-        self.airDir = Vec3(0,0,0) #mvmt dir for air states
+        # self.airDir = Vec3(0,0,0) #mvmt dir for air states
+        self.airDir=None
+        self.airAngle = None
         self.atkDir = Vec3(0,0,0) #mvmt for attacking/prayting
-        self.dodgedir = Vec3(0,0,0) #mvmt dir for something im noitr sure
+        self.dodgeDir = Vec3(0,0,0) #mvmt dir for something im noitr sure
         self.dodgeFrame = 0
 
         self.predictFutureSpace = False
@@ -82,7 +85,15 @@ class PandaBulletCharacterController(object):
         
         self.__standUpCallback = [None, [], {}]
         self.__fallCallback = [None, [], {}]
-    
+        
+
+        self.model = model
+
+
+        self.airMvt = False
+        self.rotateDummy = self.movementParent.attachNewNode("rotate dummy")
+        self.angle = 0
+
     def setCollideMask(self, *args):
         self.__walkCapsuleNP.setCollideMask(*args)
         self.__crouchCapsuleNP.setCollideMask(*args)
@@ -156,10 +167,12 @@ class PandaBulletCharacterController(object):
         else:
             return self.__currentPos <= self.__footContact[0]
     
-    def startJump(self, maxHeight=3.0):
+    def startJump(self,maxHeight):#=3.0,):
         """
         max height is 3.0 by default. Probably too much for most uses.
         """
+        
+
         self.__jump(maxHeight)
     
     def startFly(self):
@@ -181,6 +194,9 @@ class PandaBulletCharacterController(object):
         """
         Update method. Call this around doPhysics.
         """
+
+
+        
         processStates = {
             "ground": self.__processGround,
             "jumping": self.__processJumping,
@@ -211,17 +227,26 @@ class PandaBulletCharacterController(object):
         if self.isCrouching and not self.__enabledCrouch:
             self.__standUp()
     
-    
-    
+        if self.movementState in self.airStates:
+            # self.rotateDummy.setCompass(render)
+            
+            
+            # print('rotatedummyh', self.rotateDummy.getH(render), self.airAngle)
+            self.rotateDummy.setH(render,self.airAngle)
+
+            if self.airMvt == True:
+                self.airDir = self.rotateDummy.getQuat().getForward() * 5
+                # pass
+            else:
+                self.airDir = 0
+            
+        
+
     def endaction(self):
         """buffer state for exiting attack/parry/vault etc"""
         # print('state end action')
         # if "exitdodge" not in self.movementStateFilter[self.movementState]:
-        #     return
-        # if self.queueJump == True:
-        #     self.startJump(5)
-        #     self.__jump
-        #     self.queueJump = False
+
         self.currentAction = None
         self.isdodging = False
         # self.isVaulting = False
@@ -257,7 +282,7 @@ class PandaBulletCharacterController(object):
         self.movementState = "ground"
         print("new state", self.movementState)
 
-        self.airDir = 0
+        self.airDir = None
     def __fall(self):
         self.movementState = "falling"
         
@@ -338,7 +363,12 @@ class PandaBulletCharacterController(object):
         
         # self.airDir /= 
         # print('air dir', self.airDir)
-        self.setLinearMovement(self.airDir)
+        
+        if self.airDir != None:
+            # print('airdir', self.airDir)
+
+            self.setLinearMovement(self.airDir)
+     
         
 
     def __processJumping(self):
@@ -359,7 +389,10 @@ class PandaBulletCharacterController(object):
     
         # print(self.__linearVelocity)
         # print('air dir', self.airDir)
-        self.setLinearMovement(self.airDir)
+        if self.airDir != None:
+            # print('airdir', self.airDir)
+
+            self.setLinearMovement(self.airDir)
 
     def __processFlying(self):
         if self.__footContact and self.__currentPos.z - 0.1 < self.__footContact[0].z and self.__linearVelocity.z < 0.0:
@@ -380,7 +413,7 @@ class PandaBulletCharacterController(object):
         if self.dodgeFrame<4:
             return
         if self.dodgeFrame>=17:
-            print('enddodghe')
+            # print('enddodghe')
             self.movementState = "endaction"
 
         self.isdodging=True
@@ -392,12 +425,13 @@ class PandaBulletCharacterController(object):
             #     self.__currentPos.z = self.__footContact[0].z
 
 
-            # if self.dodgedir == None:
-            #     self.dodgedir = self.movementParent.getRelativeVector(self.char,Vec3(0,20,0))
-            #     # self.dodgedir = self.char.getQuat().getForward() * 20
-            #     print('dodgedir', self.dodgedir)
-        print('dodge  dir',self.dodgedir)
-        self.setLinearMovement(self.dodgedir) 
+        # if self.dodgedir == None:
+        # dodgedir = render.getRelativeVector(self.model,Vec3(0,20,0))
+
+        # dodgedir = self.model.getQuat().getForward() * 20
+        # print('dodgedir', dodgedir)
+        # print('dodge  dir',self.dodgedir)
+        self.setLinearMovement(self.dodgeDir) 
 
             # self.jumpdir = None
     def processAttack(self): ### TO DO : pass arguments here to account for atx with movement

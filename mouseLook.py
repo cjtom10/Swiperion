@@ -12,6 +12,11 @@ class MouseLook(DirectObject, object):
         self.setTargetCamera(targetCam)
         self.setTargetWin(targetWin)
         # self.recenterMouse()
+        self.toplimited = False
+        self.bottomlimited = False
+        self.disabled = False
+        self.camX = 0
+        self.camY = 0
 
         mw = base.mouseWatcherNode
 
@@ -277,9 +282,34 @@ class MouseLook(DirectObject, object):
         self.targetCamera.setH(h)
     
     def updateOrbit(self, deltaX, deltaY):
+########limit y rotation 
+        if deltaY > 2:
+            deltaY = 2
+        if deltaY < -2:
+            deltaY = -2
+
+        if self.toplimited is True and deltaY > 0:
+            deltaY = 0
+           
+        if self.bottomlimited is True and deltaY < 0:
+            deltaY = 0
+
+        if self.toplimited is True and self.camY > 0:
+            self.camY = 0
+           
+        if self.bottomlimited is True and self.camY < 0:
+            self.camY = 0
+########$#         
+     
         self.rotateAround(self.targetCamera, self.orbitCenter, Vec3(0, 0, 1), -deltaX, render)
         self.rotateAround(self.targetCamera, self.orbitCenter, Vec3(1, 0, 0), -deltaY, self.targetCamera)
-    
+
+        self.rotateAround(self.targetCamera, self.orbitCenter, Vec3(0, 0, 1), -self.camX, render)
+        self.rotateAround(self.targetCamera, self.orbitCenter, Vec3(1, 0, 0), -self.camY, self.targetCamera)
+        # print('x:', self.camX, 'y:', self.camY)
+        # print('x:', self.deltaX, 'y:', self.deltaY)
+
+########$#             
     def updatePan(self, deltaX, deltaY):
         vector = Vec3(deltaX, 0, deltaY) * 1/globalClock.getDt() * 0.01
         self.moveCamera(vector)
