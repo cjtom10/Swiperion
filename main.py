@@ -40,6 +40,8 @@ ml.centerMouse = True
 ml.mouseLookMode = ml.MLMOrbit
 ml.enable()
 
+
+
 # props = WindowProperties()
 # props.setCursorHidden(True)
 # props.setMouseMode(WindowProperties.M_relative)
@@ -79,13 +81,15 @@ class Game(DirectObject, GamepadInput):
 
         self.worldNP.setAttrib(LightRampAttrib.makeSingleThreshold(0, 0.5))
 
-        pipeline = simplepbr.init(render_node=self.playerM)
+        pipeline = simplepbr.init()
         pipeline.use_normal_maps = True
         pipeline.use_occlusion_maps = True
         gltf.patch_loader(loader)
 
         base.setBackgroundColor(0, 0.1, 0, 1)
         base.setFrameRateMeter(True)
+
+        self.playerM.setShader(self.shader)
 
         # scene_filters = CommonFilters(base.win, base.cam)
         # scene_filters.set_bloom()
@@ -102,7 +106,7 @@ class Game(DirectObject, GamepadInput):
         self.currentStrike = 0
         self.accept('mouse1', self.doAttack)
         self.accept('mouse3', self.doPrayer)  # , [self.currentStrike])
-        # self.accept('c', self.doCrouch)
+        self.accept('c', self.lockOn)
         # self.accept('c-up', self.stopCrouch)
 
         self.accept('control', self.startFly)
@@ -160,6 +164,8 @@ class Game(DirectObject, GamepadInput):
         )
         render.set_light(plight_1_node)
 
+
+        self.lockOnlim =20
         # self.worldNP.setAttrib(LightRampAttrib.makeSingleThreshold(0, 0.5))
         # pipeline = simplepbr.init(render_node=self.worldNP)
         # pipeline = simplepbr.init(render_node=self.playerM)
@@ -193,14 +199,17 @@ class Game(DirectObject, GamepadInput):
         # print('speed',self.speed,'airdir', self.character.airDir)
         # if self.speed != Vec3(0, 0, 0):
         # self.playerAngle = 0 
-        if self.speed != Vec3(0, 0, 0):
-            self.character.rotateDummy.setH(self.character.angle)
-            self.playerAngle = self.character.rotateDummy.getH(render)          
-            self.character.airMvt = True 
-              
-        else:   
-            self.playerAngle = self.playerM.getH(render)
-            self.character.airMvt = False
+        if self.lockedOn==False:
+            
+
+            if self.speed != Vec3(0, 0, 0):
+                self.character.rotateDummy.setH(self.character.angle)
+                self.playerAngle = self.character.rotateDummy.getH(render)          
+                self.character.airMvt = True 
+
+            else:   
+                self.playerAngle = self.playerM.getH(render)
+                self.character.airMvt = False
         # else:
         #     self.character.airDir = self.playerM.getQuat().getForward() * 5
         # print('angle',self.character.angle)
@@ -617,6 +626,28 @@ class Game(DirectObject, GamepadInput):
             self.detachHB(self.playerParrynode)
 
     #  self.currentStrike =1
+    def lockOn(self):
+        dist=[]
+        for enemy in self.vessels:
+            dist.append(enemy.d2p)
+
+        self.p2e =min(dist) 
+
+
+        # self.recenterCam()
+        if self.p2e>self.lockOnlim:
+                    self.lockedOn = False
+                    print('no enemies', self.p2e)
+                    return
+        self.lockedOn^= True
+        if self.lockedOn==True:
+            # print('endlockon')
+            ml.disable()
+            if self.lerpCam!=None:
+                self.lerpCam.pause()
+            self.lerpCam = None
+        else:
+            ml.enable()
     def stopCrouch(self):
         self.character.stopCrouch()
 
@@ -724,6 +755,12 @@ class Game(DirectObject, GamepadInput):
         self.character.setLinearMovement(self.speed, True)
 
         # self.playerAngle = math.atan2(-self.speed.x, self.speed.y)
+    def recenterCam(self, t = .2):
+        direction = self.character.movementParent.getH()
+        targ = self.playerM.getHpr(render)
+
+        i = LerpHprInterval(base.camera, t,targ ).start()
+
 
     def update(self, task):
         dt = globalClock.getDt()
@@ -802,7 +839,7 @@ class Game(DirectObject, GamepadInput):
         np.setPos(0, 0, 0)
         np.setCollideMask(BitMask32.allOn())
 
-        self.lvlSetup()
+        # self.lvlSetup()
 
         cm = CardMaker('ground')
         cm.setFrame(-20, 20, -20, 20)
@@ -813,8 +850,9 @@ class Game(DirectObject, GamepadInput):
 
         self.world.attachRigidBody(np.node())
 
-        spirit = loader.loadModel('spirit.bam')
-        spirit.reparentTo(self.worldNP)
+        self.spiritM = loader.loadModel('spirit.bam')
+        self.spiritM.reparentTo(self.worldNP)
+        self.spiritM.setZ(-3)
 
         self.attackQueued = False
         self.attached = False
@@ -976,12 +1014,15 @@ class Game(DirectObject, GamepadInput):
         # taskMgr.add(self.checkGhost, 'checkGhost')
 
         # enemy setup
+        self.activeEnemiesPos = {} 
         # spawn spirit
+
         self.spirit = Spirit(self.world, self.worldNP, self.playerM)
         # ai
         self.aiWorld = AIWorld(self.worldNP)
         # spawn vessels
         self.vessels: List[Vessel] = []
+
         for i in range(10):
             self.vessels.append(
                 Vessel(
@@ -994,7 +1035,11 @@ class Game(DirectObject, GamepadInput):
                     i > 8,
                 )
             )
+        
         self.collisionSetup()
+
+        for enemy in self.vessels:
+            self.activeEnemiesPos.update({enemy.name:enemy.body.getPos()})
 
     def playerHBSetup(self, HBvisible=True):
 
@@ -1135,13 +1180,14 @@ class Game(DirectObject, GamepadInput):
         np.set_collide_mask(BitMask32.bit(1))
         world.attach_rigid_body(np.node())
     def camtask(self):
+        self.spiritM.setPos(self.camtarg.getPos(render))
+
         self.camtarg.setH(self.character.movementParent,0)
         self.camPosNode.setPos(base.cam.getPos(render))
 
         
 
             # return
-        # ml.orbitCenter = self.player.character.getPos(self.worldNP)
         ml.orbitCenter = self.camtarg.getPos(render)
         cambuffer = NodePath('cambufffer')
         camPos = base.camera.getPos(render)
@@ -1246,34 +1292,38 @@ class Game(DirectObject, GamepadInput):
             if self.lerpCam.isPlaying():
                 return    
 ##########LOCK ON CAM
+        self.lockontask()
 
-        # if self.lockedOn==True and self.closest!=None:
-        #     delaytime = .7
-        #     ml.camY = 0
-        #     ml.camX = 0
-        #     base.camera.setPos(targ)
+        
+        if self.lockedOn==True and self.closest!=None:
+            # self.camtarg.setPos(self.closest.getPos(render))
+
+            # delaytime = .7
+            ml.camY = 0
+            ml.camX = 0
+            base.camera.setPos(targ)
             
-        #     c = (base.cam.getPos(render) - self.closest.getPos(render) ).length()
-        #     h = base.cam.getZ(self.closest)
-        #     d = base.cam.getY(self.closest)
+            c = (base.cam.getPos(render) - self.closest.getPos(render) ).length()
+            h = base.cam.getZ(self.closest)
+            d = base.cam.getY(self.closest)
 
-        #     a = float(h)
-        #     hyp=float(c)
+            a = float(h)
+            hyp=float(c)
 
-        #     angle = math.degrees(math.asin(a/hyp))
-        #     if ml.toplimited== False and ml.bottomlimited == False:
-        #         base.camera.setP(-angle)
+            angle = math.degrees(math.asin(a/hyp))
+            if ml.toplimited== False and ml.bottomlimited == False:
+                base.camera.setP(-angle)
          
 
-        #     # self.camtarg.setPos(self.charM.getPos(render))
+       
             
-        #     direction = self.character.movementParent.getH()
-        #     # base.cam.lookAt(self.dummy2.NP)
-        #     self.camtarg.lookAt(self.closest) ###FIXXXX
-        #     # self.camtarg.lookAt(self.dummy2.NP)
-        #     base.camera.setH(self.camtarg.getH(render))
-        # else:
-        #     self.camtarg.setHpr(0,0,0)
+            direction = self.character.movementParent.getH()
+           
+            self.camtarg.lookAt(self.closest) ###FIXXXX
+            
+            base.camera.setH(self.camtarg.getH(render))
+        else:
+            self.camtarg.setHpr(0,0,0)
 #######
       
         # if self.player.isGrapplingAir == True:
@@ -1314,6 +1364,42 @@ class Game(DirectObject, GamepadInput):
         
         # print(base.camera.getH())
         return# task.cont
+    def lockontask(self):
+        print('camz', base.cam.getZ())
+        # playerpos = self.playerM.getPos(render)
+        # v = self.activeEnemiesPos.values()
+        # closeval= min(v, key=lambda pt: (playerpos - pt).length())
+        # for key, value in self.activeEnemiesPos.items():
+        #             if closeval==value:
+        #                 self.closest = key
+  
+        distances = {}
+        for enemy in self.vessels:
+            # print(enemy.name, enemy.d2p)
+            distances.update({enemy.body:enemy.d2p})
+        self.closest = min(distances, key=distances.get)
+        # print('cloesests enem6y', self.closest)
+        if self.lockedOn ==True:
+                if self.p2e>self.lockOnlim:
+                    self.lockedOn = False
+                a = self.playerM.getX(render) - self.closest.getX(render)
+                b = self.playerM.getY(render) - self.closest.getY(render)
+
+                h = math.atan2(a,-b )
+                angle = math.degrees(h) 
+
+                # self.closest = closest
+                self.playerM.setH(render, angle)
+                # self.camtarg.setH(render, angle)
+                # base.cam.setH(angle)
+
+        #         self.crosshair.reparentTo(self.closest)
+        #        
+        # else:
+        #         self.crosshair.reparentTo(self.storage) 
+                # self.closest = None   
+        return             
+
     def updatePlayer(self,dt):
 
         # print('rotatedummy', self.character.rotateDummy.getH(render), self.character.airDir)

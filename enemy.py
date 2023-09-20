@@ -20,6 +20,7 @@ CAPSULE_SHAPE = BulletCapsuleShape(0.5, 2.4, ZUp)
 Z_OUT_OF_BOUNDS = -1000
 
 
+
 class Vessel:
     def __init__(
         self,
@@ -455,7 +456,7 @@ class Vessel:
             update_vessel = {1: self.vessel_wander, 2: self.vessel_stationary}
             update_vessel[self.vesselBehavior]()
             return
-        print(self.name, 'STATE', self.state)
+        # print(self.name, 'STATE', self.state)
         # wait for staggered anim to finish
         if self.state == 'staggered':
             return
