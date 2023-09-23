@@ -29,7 +29,7 @@ class Game(DirectObject):
     base.setBackgroundColor(0.1, 0.1, 0.8, 1)
     base.setFrameRateMeter(True)
 
-    base.cam.setPos(0, -20, 4)
+    # base.cam.setPos(0, -20, 4)
     base.cam.lookAt(0, 0, 0)
 
     pipeline = simplepbr.init()
@@ -78,8 +78,9 @@ class Game(DirectObject):
 
 
     self.camNode = self.worldNP.attachNewNode('camnode')
-    # base.cam.reparentTo(self.camNode)
-    # base.cam.setY(-5)
+    base.cam.reparentTo(self.camNode)
+    base.cam.setPos(0,-10,7)
+    base.cam.setP(-30)
 
 
   # _____HANDLER_____
@@ -201,7 +202,7 @@ class Game(DirectObject):
 
     np = self.worldNP.attachNewNode(BulletRigidBodyNode('Ground'))
     np.node().addShape(shape)
-    np.setPos(0, 0, -1)
+    np.setPos(0, 0, 0)
     np.setCollideMask(BitMask32.allOn())
 
     self.world.attachRigidBody(np.node())
@@ -224,14 +225,19 @@ class Game(DirectObject):
     shape = BulletCapsuleShape(w, h - 2 * w, ZUp)
 
     self.player = BulletCharacterControllerNode(shape, 0.4, 'Player')
+    
     # self.player.setMass(20.0)
     # self.player.setMaxSlope(45.0)
     # self.player.setGravity(9.81)
     self.playerNP = self.worldNP.attachNewNode(self.player)
+    m = loader.loadModel('guy_static.glb')
+    m.reparentTo(self.playerNP)
+    m.setZ(-1)
     self.playerNP.setPos(-2, 0, 10)
-    self.playerNP.setH(-90)
+    # self.playerNP.setH(-90)
     self.playerNP.setCollideMask(BitMask32.allOn())
     self.world.attachCharacter(self.player)
+
 
 
 
