@@ -165,15 +165,16 @@ class Game(DirectObject):
     for x in range(0, size, spacing):
           
           for y in range(0, size, spacing):
-              for i in range(200):
-                  tile = self.worldNP.attachNewNode(f'tile{i}')
-                  
-                  tile.setPos(x,y,0)
-                  self.level.append(tile)
-                  block.instanceTo(tile)
+             
+              tile = self.worldNP.attachNewNode(f'tile_{x}_{y}')
+              
+              tile.setPos(x,y,0)
+              self.level.append(tile)
+              block.instanceTo(tile)
               if nodeCount > 0:
                 
                   nodeCount -= 1
+         
                  
     # for t in range(len(self.level)):
     #   block.instanceTo(self.level[t])             
