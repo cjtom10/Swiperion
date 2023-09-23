@@ -634,7 +634,7 @@ class Game(DirectObject, GamepadInput):
         self.p2e =min(dist) 
 
 
-        # self.recenterCam()
+        self.recenterCam()
         if self.p2e>self.lockOnlim:
                     self.lockedOn = False
                     print('no enemies', self.p2e)
@@ -759,6 +759,8 @@ class Game(DirectObject, GamepadInput):
         direction = self.character.movementParent.getH()
         targ = self.playerM.getHpr(render)
 
+        # pos = (-1,-9,7)
+
         i = LerpHprInterval(base.camera, t,targ ).start()
 
 
@@ -875,6 +877,9 @@ class Game(DirectObject, GamepadInput):
                 'takehit': 'models/player/player_takehit.bam'
             },
         )
+        # self.playerM.clearTexture()
+        
+        
         self.character = PandaBulletCharacterController(
             self.world, self.worldNP, 1.75, 1.3, 0.5, 2,self.playerM
         )
@@ -1365,7 +1370,7 @@ class Game(DirectObject, GamepadInput):
         # print(base.camera.getH())
         return# task.cont
     def lockontask(self):
-        print('camz', base.cam.getZ())
+        print('camz', base.cam.getPos(self.playerM), base.cam.getP(self.playerM))
         # playerpos = self.playerM.getPos(render)
         # v = self.activeEnemiesPos.values()
         # closeval= min(v, key=lambda pt: (playerpos - pt).length())
