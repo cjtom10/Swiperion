@@ -18,6 +18,9 @@ from panda3d.core import NodePath
 
 from panda3d.bullet import *
 
+from direct.gui.OnscreenText import OnscreenText
+
+
 import gltf
 import simplepbr
 
@@ -77,10 +80,10 @@ class Game(DirectObject):
     self.setup()
     
 
-    self.accept('w',self.move, [self.playerNP, 'forward'])
-    self.accept('s',self.move, [self.playerNP, 'back'])
-    self.accept('a',self.move, [self.playerNP, 'left'])
-    self.accept('d',self.move, [self.playerNP, 'right'])
+    self.accept('w',self.move, [self.player.NP, 'forward'])
+    self.accept('s',self.move, [self.player.NP, 'back'])
+    self.accept('a',self.move, [self.player.NP, 'left'])
+    self.accept('d',self.move, [self.player.NP, 'right'])
 
     self.camNode = self.worldNP.attachNewNode('camnode')
     base.cam.reparentTo(self.camNode)
@@ -122,7 +125,7 @@ class Game(DirectObject):
   #  self.crouching = not self.crouching
   #  sz = self.crouching and 0.6 or 1.0
 
-  #  self.playerNP2.setScale(Vec3(1, 1, sz))
+  #  self.player.NP2.setScale(Vec3(1, 1, sz))
 
   
   # ____TASK___
@@ -147,10 +150,12 @@ class Game(DirectObject):
   def update(self, task):
     dt = globalClock.getDt()
 
-    self.processInput(dt)
+    # self.processInput(dt)
     self.world.doPhysics(dt, 4, 1./240.)
 
-    self.camNode.setPos(self.playerNP.getPos(render))
+    self.camNode.setPos(self.player.NP.getPos(render))
+
+    self.ap.setText(f'AP:{self.player.AP}')
 
     return task.cont
 
@@ -228,35 +233,80 @@ class Game(DirectObject):
 
     self.lvl()
 
-    self.characterSetup(loader.loadModel('guy_static.glb'),
-                         self.level[0].getPos())
 
+    self.player = Character(self.worldNP,
+                            self.world,
+                            loader.loadModel('guy_static.glb'),
+                            self.level[0][0].getPos()
+                            )
+    
+    # self.characterSetup(loader.loadModel('guy_static.glb'),
+    #                      self.level[0][0].getPos())
+
+    #display AP
+    self.ap = OnscreenText(text = f'AP:{self.player.AP}')
+    self.ap.setPos(-1,-.8)
   
-  def characterSetup(self, model, startpoint):
+  # def characterSetup(self, model, startpoint):
+  #   # Character
+  #   h = 1.75
+  #   w = 0.4
+  #   shape = BulletCapsuleShape(w, h - 2 * w, ZUp)
+
+  #   self.player = BulletCharacterControllerNode(shape, 0.4, 'Player')
+    
+  #   # self.player.setMass(20.0)
+  #   # self.player.setMaxSlope(45.0)
+  #   # self.player.setGravity(9.81)
+  #   self.player.NP = self.worldNP.attachNewNode(self.player)
+
+  #   model.reparentTo(self.player.NP)
+  #   model.setZ(-1)
+  #   self.player.NP.setPos(-2, 0, 10)
+  #   # self.player.NP.setH(-90)
+  #   self.player.NP.setCollideMask(BitMask32.allOn())
+  #   self.world.attachCharacter(self.player)
+
+  #   self.player.NP.setPos(startpoint)
+
+
+
+
+class Character():
+  def __init__(
+      self,
+      worldNP: NodePath,
+      world: BulletWorld,
+      model,
+      startpoint
+      ):
+    self.AP = 0
+    self.world = world
+    self.worldNP = worldNP
+    self.model = model
+    self.startPoint = startpoint
+
+  # def characterSetup(self, model, startpoint):
     # Character
     h = 1.75
     w = 0.4
     shape = BulletCapsuleShape(w, h - 2 * w, ZUp)
 
-    self.player = BulletCharacterControllerNode(shape, 0.4, 'Player')
+    self.controller = BulletCharacterControllerNode(shape, 0.4, 'Player')
     
     # self.player.setMass(20.0)
     # self.player.setMaxSlope(45.0)
     # self.player.setGravity(9.81)
-    self.playerNP = self.worldNP.attachNewNode(self.player)
+    self.NP = self.worldNP.attachNewNode(self.controller)
 
-    model.reparentTo(self.playerNP)
+    model.reparentTo(self.NP)
     model.setZ(-1)
-    self.playerNP.setPos(-2, 0, 10)
-    # self.playerNP.setH(-90)
-    self.playerNP.setCollideMask(BitMask32.allOn())
-    self.world.attachCharacter(self.player)
+    self.NP.setPos(-2, 0, 10)
+    # self.player.NP.setH(-90)
+    self.NP.setCollideMask(BitMask32.allOn())
+    self.world.attachCharacter(self.controller)
 
-    self.playerNP.setPos(startpoint)
-
-
-
-
+    self.NP.setPos(self.startPoint)
 
 
 
