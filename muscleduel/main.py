@@ -62,20 +62,25 @@ class Game(DirectObject):
     #self.accept('space', self.doJump)
     #self.accept('c', self.doCrouch)
 
-    inputState.watchWithModifiers('forward', 'w')
-    inputState.watchWithModifiers('left', 'a')
-    inputState.watchWithModifiers('reverse', 's')
-    inputState.watchWithModifiers('right', 'd')
-    inputState.watchWithModifiers('turnLeft', 'q')
-    inputState.watchWithModifiers('turnRight', 'e')
+    # inputState.watchWithModifiers('forward', 'w')
+    # inputState.watchWithModifiers('left', 'a')
+    # inputState.watchWithModifiers('reverse', 's')
+    # inputState.watchWithModifiers('right', 'd')
+    # inputState.watchWithModifiers('turnLeft', 'q')
+    # inputState.watchWithModifiers('turnRight', 'e')
+    
 
     # Task
     taskMgr.add(self.update, 'updateWorld')
 
     # Physics
     self.setup()
-    self.lvl()
+    
 
+    self.accept('w',self.move, [self.playerNP, 'forward'])
+    self.accept('s',self.move, [self.playerNP, 'back'])
+    self.accept('a',self.move, [self.playerNP, 'left'])
+    self.accept('d',self.move, [self.playerNP, 'right'])
 
     self.camNode = self.worldNP.attachNewNode('camnode')
     base.cam.reparentTo(self.camNode)
@@ -122,16 +127,19 @@ class Game(DirectObject):
   
   # ____TASK___
 
+  def move(self, char, direction):
+    return
+    
   def processInput(self, dt):
     speed = Vec3(0, 0, 0)
     omega = 0.0
 
-    if inputState.isSet('forward'): speed.setY( 2.0)
-    if inputState.isSet('reverse'): speed.setY(-2.0)
-    if inputState.isSet('left'):    speed.setX(-2.0)
-    if inputState.isSet('right'):   speed.setX( 2.0)
-    if inputState.isSet('turnLeft'):  omega =  120.0
-    if inputState.isSet('turnRight'): omega = -120.0
+    # if inputState.isSet('forward'): speed.setY( 2.0)
+    # if inputState.isSet('reverse'): speed.setY(-2.0)
+    # if inputState.isSet('left'):    speed.setX(-2.0)
+    # if inputState.isSet('right'):   speed.setX( 2.0)
+    # if inputState.isSet('turnLeft'):  omega =  120.0
+    # if inputState.isSet('turnRight'): omega = -120.0
 
     self.player.setAngularMovement(omega)
     self.player.setLinearMovement(speed, True)
@@ -176,7 +184,7 @@ class Game(DirectObject):
                 
                   nodeCount -= 1
          
-                 
+    # print(self.level)        
     # for t in range(len(self.level)):
     #   block.instanceTo(self.level[t])             
                   # print(tile.getPos())
@@ -219,6 +227,13 @@ class Game(DirectObject):
 
     self.world.attachRigidBody(np.node())
 
+    self.lvl()
+
+    self.characterSetup(loader.loadModel('guy_static.glb'),
+                         self.level[0].getPos())
+
+  
+  def characterSetup(self, model, startpoint):
     # Character
     h = 1.75
     w = 0.4
@@ -230,13 +245,15 @@ class Game(DirectObject):
     # self.player.setMaxSlope(45.0)
     # self.player.setGravity(9.81)
     self.playerNP = self.worldNP.attachNewNode(self.player)
-    m = loader.loadModel('guy_static.glb')
-    m.reparentTo(self.playerNP)
-    m.setZ(-1)
+
+    model.reparentTo(self.playerNP)
+    model.setZ(-1)
     self.playerNP.setPos(-2, 0, 10)
     # self.playerNP.setH(-90)
     self.playerNP.setCollideMask(BitMask32.allOn())
     self.world.attachCharacter(self.player)
+
+    self.playerNP.setPos(startpoint)
 
 
 
