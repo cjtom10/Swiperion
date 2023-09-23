@@ -164,16 +164,15 @@ class Game(DirectObject):
       
       # tile.setX(i+1)
     for x in range(0, size, spacing):
-          
+          self.level.append([])
           for y in range(0, size, spacing):
              
               tile = self.worldNP.attachNewNode(f'tile_{x}_{y}')
               
               tile.setPos(x,y,0)
-              self.level.append(tile)
+              self.level[-1].append(tile)
               block.instanceTo(tile)
               if nodeCount > 0:
-                
                   nodeCount -= 1
          
                  
