@@ -128,7 +128,15 @@ class Game(DirectObject):
   # ____TASK___
 
   def move(self, char, direction):
-    return
+        if direction == 'forward' and self.player_y < len(self.level[0]) - 1:
+            self.player_y += 1
+        elif direction == 'back' and self.player_y > 0:
+            self.player_y -= 1
+        elif direction == 'left' and self.player_x > 0:
+            self.player_x -= 1
+        elif direction == 'right' and self.player_x < len(self.level) - 1:
+            self.player_x += 1
+        self.playerNP.setPos(self.level[self.player_x][self.player_y].getPos())
     
   def processInput(self, dt):
     speed = Vec3(0, 0, 0)
@@ -229,10 +237,10 @@ class Game(DirectObject):
     self.lvl()
 
     self.characterSetup(loader.loadModel('guy_static.glb'),
-                         self.level[0].getPos())
+                         0, 0)
 
   
-  def characterSetup(self, model, startpoint):
+  def characterSetup(self, model, grid_x, grid_y):
     # Character
     h = 1.75
     w = 0.4
@@ -252,7 +260,9 @@ class Game(DirectObject):
     self.playerNP.setCollideMask(BitMask32.allOn())
     self.world.attachCharacter(self.player)
 
-    self.playerNP.setPos(startpoint)
+    self.player_x = grid_x
+    self.player_y = grid_y
+    self.playerNP.setPos(self.level[grid_x][grid_y].getPos())
 
 
 
