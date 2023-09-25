@@ -166,6 +166,7 @@ class Game(DirectObject):
      if char.is_Moving:
            return
      
+     char.X_Pos, char.Y_Pos = self.marker_x, self.marker_y
      char.target_Pos = self.moveMarker.getPos()
 
      self.moveMarker.reparentTo(self.storage)
