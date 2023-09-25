@@ -78,17 +78,21 @@ class Game(DirectObject):
 
     # Physics
     self.setup()
-    
 
-    self.accept('w',self.move, [self.player.NP, 'forward'])
-    self.accept('s',self.move, [self.player.NP, 'back'])
-    self.accept('a',self.move, [self.player.NP, 'left'])
-    self.accept('d',self.move, [self.player.NP, 'right'])
+    self.accept('w',self.spaceCheck, [self.player, 'forward'])
+    self.accept('s',self.spaceCheck, [self.player, 'back'])
+    self.accept('a',self.spaceCheck, [self.player, 'left'])
+    self.accept('d',self.spaceCheck, [self.player, 'right'])
+    #for testing purposes - n
+    self.accept('w-up',self.move, [self.player])
+    self.accept('s-up',self.move, [self.player])
+    self.accept('a-up',self.move, [self.player])
+    self.accept('d-up',self.move, [self.player])
 
     self.camNode = self.worldNP.attachNewNode('camnode')
     base.cam.reparentTo(self.camNode)
-    base.cam.setPos(0,-10,7)
-    base.cam.setP(-30)
+    base.cam.setPos(-2,-12,3)
+    base.cam.setP(-10)
 
 
   # _____HANDLER_____
@@ -130,8 +134,32 @@ class Game(DirectObject):
   
   # ____TASK___
 
-  def move(self, char, direction):
-    return
+  def spaceCheck(self,char, direction):
+        
+        if char.is_Moving==True:
+           return
+        
+        if direction == 'forward' and char.Y_Pos < len(self.level[0]) - 1:
+            char.Y_Pos += 1
+        elif direction == 'back' and char.Y_Pos > 0:
+            char.Y_Pos -= 1
+        elif direction == 'left' and char.X_Pos > 0:
+            char.X_Pos -= 1
+        elif direction == 'right' and char.X_Pos < len(self.level) - 1:
+            char.X_Pos += 1
+
+        self.moveMarker.reparentTo(render)
+        self.moveMarker.setPos(self.level[char.X_Pos][char.Y_Pos].getPos())
+
+        
+
+  def move(self, char):
+     if char.is_Moving==True:
+           return
+     
+     char.target_Pos = self.moveMarker.getPos()
+
+     self.moveMarker.reparentTo(self.storage)
     
   def processInput(self, dt):
     speed = Vec3(0, 0, 0)
@@ -156,6 +184,7 @@ class Game(DirectObject):
     self.camNode.setPos(self.player.NP.getPos(render))
 
     self.ap.setText(f'AP:{self.player.AP}')
+    self.player.update_Character(dt)
 
     return task.cont
 
@@ -206,6 +235,8 @@ class Game(DirectObject):
     self.world.setGravity(Vec3(0, 0, -9.81))
     self.world.setDebugNode(self.debugNP.node())
 
+    self.storage = NodePath('storage')
+
     # Ground
     shape = BulletPlaneShape(Vec3(0, 0, 1), 0)
 
@@ -239,9 +270,15 @@ class Game(DirectObject):
                             loader.loadModel('guy_static.glb'),
                             self.level[0][0].getPos()
                             )
+    self.moveMarker = loader.loadModel('move_marker.glb')
+    self.moveMarker.setScale(.9)
+    self.moveMarker.reparentTo(self.storage)
+    self.moveMarker.setTransparency(True)
     
     # self.characterSetup(loader.loadModel('guy_static.glb'),
     #                      self.level[0][0].getPos())
+    # self.player.characterSetup(loader.loadModel('guy_static.glb'),
+    #                      0, 0)
 
     #display AP
     self.ap = OnscreenText(text = f'AP:{self.player.AP}')
@@ -286,6 +323,12 @@ class Character():
     self.model = model
     self.startPoint = startpoint
 
+    self.X_Pos = int(self.startPoint.x)
+    self.Y_Pos = int(self.startPoint.y)
+    self.current_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
+    self.target_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
+    self.is_Moving = False
+
   # def characterSetup(self, model, startpoint):
     # Character
     h = 1.75
@@ -308,7 +351,34 @@ class Character():
 
     self.NP.setPos(self.startPoint)
 
+  def update_Character(self,d):
+     
+    # self.current_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
+    #  self.NP.setPos(self.current_Pos)
+    self.current_Pos = self.NP.getPos(render)
+    print('player currentPos:,', self.current_Pos, 'target:', self.target_Pos)
+     #moving
+    if self.current_Pos!= self.target_Pos:
+        self.is_Moving = True
+        #lerp between points
+        print('need to move neow')
+        dx = self.current_Pos.x
+        dy = self.current_Pos.y
+        if self.target_Pos.x > self.current_Pos.x:
+          dx += .1
+        elif self.target_Pos.x < self.current_Pos.x:  
+          dx -= .1
+       
+        if self.target_Pos.y > self.current_Pos.y:
+          dy += .1
+        elif self.target_Pos.y < self.current_Pos.y:  
+          dy -= .1
 
+        # self.NP.setPos(dx,dy,self.current_Pos.z)
+    
+    else:
+        self.is_Moving = False
+        
 
 game = Game()
 run()
