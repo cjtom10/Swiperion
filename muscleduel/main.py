@@ -159,17 +159,7 @@ class Game(DirectObject):
         self.moveMarker.reparentTo(render)
         target_pos = self.level[self.marker_x][self.marker_y].getPos()
         marker_move = LerpPosInterval(self.moveMarker, 0.1, target_pos)
-        originalHpr = char.NP.getHpr()
         marker_move.start()
-
-        if marker_x == char.X_Pos and marker_y == char.Y_Pos:
-            # don't reset look if on same spot as char
-            return
-        char.NP.lookAt(LPoint3f(target_pos[0], target_pos[1], target_pos[2]))
-        look_pos = char.NP.getHpr()
-        char.NP.setHpr(originalHpr)
-        char_look = LerpHprInterval(char.NP, 0.1, look_pos)
-        char_look.start()
 
         
 
@@ -391,6 +381,16 @@ class Character():
         #lerp between points
         move = LerpPosInterval(self.NP, 0.1, self.target_Pos)
         move.start()
+
+        originalHpr = self.NP.getHpr()
+        self.NP.lookAt(LPoint3f(self.target_Pos[0], self.target_Pos[1], self.target_Pos[2]))
+        look_pos = self.NP.getHpr()
+        self.NP.setHpr(originalHpr)
+        currentH = self.NP.getH()
+        targetH = look_pos.getX()
+        adjustedH = currentH + ((targetH - currentH + 180) % 360 - 180)
+        look = LerpHprInterval(self.NP, 0.1, (adjustedH, look_pos.getY(), look_pos.getZ()))
+        look.start()
     else:
         self.is_Moving = False
         
