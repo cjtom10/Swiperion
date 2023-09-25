@@ -87,10 +87,7 @@ class Game(DirectObject):
     self.accept('a',self.spaceCheck, [self.player, 'left'])
     self.accept('d',self.spaceCheck, [self.player, 'right'])
     #for testing purposes - n
-    self.accept('w-up',self.move, [self.player])
-    self.accept('s-up',self.move, [self.player])
-    self.accept('a-up',self.move, [self.player])
-    self.accept('d-up',self.move, [self.player])
+    self.accept('space',self.move, [self.player])
 
     self.camNode = self.worldNP.attachNewNode('camnode')
     base.cam.reparentTo(self.camNode)
@@ -142,17 +139,26 @@ class Game(DirectObject):
         if char.is_Moving:
            return
         
-        if direction == 'forward' and char.Y_Pos < len(self.level[0]) - 1:
-            char.Y_Pos += 1
-        elif direction == 'back' and char.Y_Pos > 0:
-            char.Y_Pos -= 1
-        elif direction == 'left' and char.X_Pos > 0:
-            char.X_Pos -= 1
-        elif direction == 'right' and char.X_Pos < len(self.level) - 1:
-            char.X_Pos += 1
+        marker_x, marker_y = self.marker_x, self.marker_y
+        if direction == 'forward':
+            marker_y += 1
+        elif direction == 'back':
+            marker_y -= 1
+        elif direction == 'left':
+            marker_x -= 1
+        elif direction == 'right':
+            marker_x += 1
+
+        # cancel if out of bounds
+        if marker_x < max(0, char.X_Pos - 1) or marker_x > min(len(self.level), char.X_Pos + 1):
+            return
+        if marker_y < max(0, char.Y_Pos - 1) or marker_y > min(len(self.level[0]), char.Y_Pos + 1):
+            return
+        self.marker_x, self.marker_y = marker_x, marker_y
 
         self.moveMarker.reparentTo(render)
-        self.moveMarker.setPos(self.level[char.X_Pos][char.Y_Pos].getPos())
+        marker_move = LerpPosInterval(self.moveMarker, 0.1, self.level[self.marker_x][self.marker_y].getPos())
+        marker_move.start()
 
         
 
@@ -277,6 +283,8 @@ class Game(DirectObject):
     self.moveMarker.setScale(.9)
     self.moveMarker.reparentTo(self.storage)
     self.moveMarker.setTransparency(True)
+    self.marker_x = 0
+    self.marker_y = 0
     
     # self.characterSetup(loader.loadModel('guy_static.glb'),
     #                      self.level[0][0].getPos())
@@ -361,12 +369,11 @@ class Character():
     #  self.NP.setPos(self.current_Pos)
     self.current_Pos = self.NP.getPos(render)
      #moving
-    print('player', self.is_Moving, 'currentPos:', self.current_Pos, 'target:', self.target_Pos)
     if (self.current_Pos - self.target_Pos).length() > 0.1:
         self.is_Moving = True
         #lerp between points
-        move = LerpPosInterval(self.NP, 0.1, self.target_Pos)
-        move.start()
+        marker_move = LerpPosInterval(self.NP, 0.1, self.target_Pos)
+        marker_move.start()
     else:
         self.is_Moving = False
         
