@@ -165,10 +165,8 @@ class Game(DirectObject):
   def move(self, char):
      if char.is_Moving:
            return
-     
      char.X_Pos, char.Y_Pos = self.marker_x, self.marker_y
-     char.target_Pos = self.moveMarker.getPos()
-
+     char.target_Pos = self.level[char.X_Pos][char.Y_Pos].getPos()
      self.moveMarker.reparentTo(self.storage)
     
   def processInput(self, dt):
@@ -364,7 +362,7 @@ class Character():
 
     self.NP.setPos(self.startPoint)
 
-  def update_Character(self,d):
+  def update_Character(self, dt):
      
     # self.current_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
     #  self.NP.setPos(self.current_Pos)
