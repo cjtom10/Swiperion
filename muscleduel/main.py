@@ -88,11 +88,13 @@ class Game(DirectObject):
     self.accept('d',self.spaceCheck, [self.player, 'right'])
     #for testing purposes - n
     self.accept('space',self.move, [self.player])
+    self.accept('mouse1',self.strike, [self.player])
 
     self.camNode = self.worldNP.attachNewNode('camnode')
     base.cam.reparentTo(self.camNode)
-    base.cam.setPos(-2,-12,3)
+    base.cam.setPos(-4,-15,6)
     base.cam.setP(-10)
+    base.cam.setH(-10)
 
 
   # _____HANDLER_____
@@ -136,7 +138,8 @@ class Game(DirectObject):
 
   def spaceCheck(self,char, direction):
         
-        if char.is_Moving:
+        # if char.is_Moving:
+        if char.state in char.actionStates:
            return
         
         marker_x, marker_y = self.marker_x, self.marker_y
@@ -174,17 +177,28 @@ class Game(DirectObject):
         
 
   def move(self, char):
-     if char.is_Moving:
+    #  if char.is_Moving:
+     if char.state in char.actionStates:
            return
      if char.AP<1:
         return
      
-     char.model.play('dodge')
+    #  char.model.play('dodge')
+     char.state = 'dodge'
 
      char.AP -=1
      char.X_Pos, char.Y_Pos = self.marker_x, self.marker_y
      char.target_Pos = self.level[char.X_Pos][char.Y_Pos].getPos()
      self.moveMarker.reparentTo(self.storage)
+  
+  def strike(self, char):
+      if char.state in char.actionStates:
+        return
+      if char.AP<2:
+        return
+      
+      char.AP-=2
+      char.state = 'strike1'
     
   def processInput(self, dt):
     speed = Vec3(0, 0, 0)
@@ -207,6 +221,7 @@ class Game(DirectObject):
     self.world.doPhysics(dt, 4, 1./240.)
 
     self.camNode.setPos(self.player.NP.getPos(render))
+    # self.camNode.setH(self.player.NP.getH(render))
 
     self.ap.setText(f'AP:{self.player.AP}')
     self.player.update_Character(dt)
@@ -297,7 +312,7 @@ class Game(DirectObject):
                 'jump': 'player/player_JUMP.bam',
                 'fall': 'player/player_FALL.bam',
                 'land': 'player/player_land.bam',
-                'dodge': 'player/player_evade.bam',
+                'dodge': 'player/player_evade2.bam',
                 'strike1': 'player/player_strike1.bam',
                 'strike2': 'player/player_strike2.bam',
                 'strike3': 'player/player_strike3.bam',
@@ -374,11 +389,15 @@ class Character():
     self.target_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
     self.is_Moving = False
 
+    self.state = 'idle'
+    self.actionStates = ['dodge', 'strike1']
+    self.animSeq = None
+
   # def characterSetup(self, model, startpoint):
     # Character
-    h = 1.75
-    w = 0.4
-    shape = BulletCapsuleShape(w, h - 2 * w, ZUp)
+    # h = 1.75
+    # w = 0.4
+    # shape = BulletCapsuleShape(w, h - 2 * w, ZUp)
 
     # self.controller = BulletCharacterControllerNode(shape, 0.4, 'Player')
     
@@ -420,16 +439,33 @@ class Character():
         adjustedH = currentH + ((targetH - currentH + 180) % 360 - 180)
         look = LerpHprInterval(self.NP, 0.1, (adjustedH, look_pos.getY(), look_pos.getZ()))
         look.start()
+    #attacking
+    elif self.state == 'strike1':
+        print('attacl')
+        # PLACEHOLDE
+        frame = self.model.getCurrentFrame()
+        if frame != None:
+          if frame>16:
+            self.state = 'idle'
     else:
         self.is_Moving = False
-    # self.anims()
+        self.state = 'idle'
+
+    self.anims()
 
 
   def anims(self):
-     currentAnim = 'idle'
+    currentAnim = self.model.getCurrentAnim()
+    anim = self.state
 
-     if self.model.getCurrentAnim!=(currentAnim):
-        self.model.loop(currentAnim)
+    print(currentAnim)
+
+    # if self.animSeq != None:
+         
+    #              return
+
+    if anim!=(currentAnim):
+       self.model.play(anim)
 
   def APreset(self, t):
     #  print('ap timer:',self.AP_timer)
