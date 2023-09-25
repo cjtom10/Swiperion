@@ -172,6 +172,10 @@ class Game(DirectObject):
   def move(self, char):
      if char.is_Moving:
            return
+     if char.AP<1:
+        return
+
+     char.AP -=1
      char.X_Pos, char.Y_Pos = self.marker_x, self.marker_y
      char.target_Pos = self.level[char.X_Pos][char.Y_Pos].getPos()
      self.moveMarker.reparentTo(self.storage)
@@ -334,7 +338,8 @@ class Character():
       model,
       startpoint
       ):
-    self.AP = 0
+    self.AP = 2
+    self.AP_timer=0
     self.world = world
     self.worldNP = worldNP
     self.model = model
@@ -373,6 +378,8 @@ class Character():
      
     # self.current_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
     #  self.NP.setPos(self.current_Pos)
+    self.APreset(dt)
+
     self.current_Pos = self.NP.getPos(render)
      #moving
     if (self.current_Pos - self.target_Pos).length() > 0.1:
@@ -382,6 +389,15 @@ class Character():
         move.start()
     else:
         self.is_Moving = False
+        
+  def APreset(self, t):
+     print('ap timer:',self.AP_timer)
+     if self.AP <2:
+        self.AP_timer+=t
+        if self.AP_timer>=1:
+           self.AP+=1
+           self.AP_timer=0
+
         
 
 game = Game()
