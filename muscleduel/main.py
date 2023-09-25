@@ -10,6 +10,7 @@ import time
 import direct.directbase.DirectStart
 
 from direct.actor.Actor import Actor
+from direct.interval.LerpInterval import LerpPosInterval
 from direct.showbase.DirectObject import DirectObject
 from direct.showbase.InputStateGlobal import inputState
 
@@ -40,7 +41,7 @@ class Game(DirectObject):
     pipeline = simplepbr.init()
     pipeline.use_normal_maps = True
     pipeline.use_occlusion_maps = True
-    gltf.patch_loader(loader)
+    # gltf.patch_loader(loader)
 
     # Light
     alight = AmbientLight('ambientLight')
@@ -138,7 +139,7 @@ class Game(DirectObject):
 
   def spaceCheck(self,char, direction):
         
-        if char.is_Moving==True:
+        if char.is_Moving:
            return
         
         if direction == 'forward' and char.Y_Pos < len(self.level[0]) - 1:
@@ -156,7 +157,7 @@ class Game(DirectObject):
         
 
   def move(self, char):
-     if char.is_Moving==True:
+     if char.is_Moving:
            return
      
      char.target_Pos = self.moveMarker.getPos()
@@ -359,33 +360,13 @@ class Character():
     # self.current_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
     #  self.NP.setPos(self.current_Pos)
     self.current_Pos = self.NP.getPos(render)
-    print('player currentPos:,', self.current_Pos, 'target:', self.target_Pos)
      #moving
-    if (self.current_Pos.x != self.target_Pos.x) and (self.current_Pos.yx != self.target_Pos.y):
-        # if self.is_Moving == True:
-        #    return
+    print('player', self.is_Moving, 'currentPos:', self.current_Pos, 'target:', self.target_Pos)
+    if (self.current_Pos - self.target_Pos).length() > 0.1:
         self.is_Moving = True
-        mo = LerpPosInterval(self.NP,
-                              .2,
-                               self.target_Pos)
-        move = Sequence(mo).start()
-
         #lerp between points
-        # print('need to move neow')
-        # dx = self.current_Pos.x
-        # dy = self.current_Pos.y
-        # if self.target_Pos.x > self.current_Pos.x:
-        #   dx += .1
-        # elif self.target_Pos.x < self.current_Pos.x:  
-        #   dx -= .1
-       
-        # if self.target_Pos.y > self.current_Pos.y:
-        #   dy += .1
-        # elif self.target_Pos.y < self.current_Pos.y:  
-        #   dy -= .1
-
-        # self.NP.setPos(dx,dy,self.current_Pos.z)
-    
+        move = LerpPosInterval(self.NP, 0.1, self.target_Pos)
+        move.start()
     else:
         self.is_Moving = False
         
