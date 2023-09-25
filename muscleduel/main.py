@@ -19,6 +19,8 @@ from panda3d.core import NodePath
 from panda3d.bullet import *
 
 from direct.gui.OnscreenText import OnscreenText
+from direct.interval.LerpInterval import LerpPosInterval
+from direct.interval.IntervalGlobal import *
 
 
 import gltf
@@ -358,21 +360,28 @@ class Character():
     self.current_Pos = self.NP.getPos(render)
     print('player currentPos:,', self.current_Pos, 'target:', self.target_Pos)
      #moving
-    if self.current_Pos!= self.target_Pos:
+    if (self.current_Pos.x != self.target_Pos.x) and (self.current_Pos.yx != self.target_Pos.y):
+        if self.is_Moving == True:
+           return
         self.is_Moving = True
+        mo = LerpPosInterval(self.NP,
+                              .2,
+                               self.target_Pos)
+        move = Sequence(mo).start()
+
         #lerp between points
-        print('need to move neow')
-        dx = self.current_Pos.x
-        dy = self.current_Pos.y
-        if self.target_Pos.x > self.current_Pos.x:
-          dx += .1
-        elif self.target_Pos.x < self.current_Pos.x:  
-          dx -= .1
+        # print('need to move neow')
+        # dx = self.current_Pos.x
+        # dy = self.current_Pos.y
+        # if self.target_Pos.x > self.current_Pos.x:
+        #   dx += .1
+        # elif self.target_Pos.x < self.current_Pos.x:  
+        #   dx -= .1
        
-        if self.target_Pos.y > self.current_Pos.y:
-          dy += .1
-        elif self.target_Pos.y < self.current_Pos.y:  
-          dy -= .1
+        # if self.target_Pos.y > self.current_Pos.y:
+        #   dy += .1
+        # elif self.target_Pos.y < self.current_Pos.y:  
+        #   dy -= .1
 
         # self.NP.setPos(dx,dy,self.current_Pos.z)
     
