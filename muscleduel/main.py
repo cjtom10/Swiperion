@@ -159,7 +159,17 @@ class Game(DirectObject):
         self.moveMarker.reparentTo(render)
         target_pos = self.level[self.marker_x][self.marker_y].getPos()
         marker_move = LerpPosInterval(self.moveMarker, 0.1, target_pos)
+        originalHpr = char.NP.getHpr()
         marker_move.start()
+
+        if marker_x == char.X_Pos and marker_y == char.Y_Pos:
+            # don't reset look if on same spot as char
+            return
+        char.NP.lookAt(LPoint3f(target_pos[0], target_pos[1], target_pos[2]))
+        look_pos = char.NP.getHpr()
+        char.NP.setHpr(originalHpr)
+        # char_look = LerpHprInterval(char.NP, 0.1, look_pos)
+        # char_look.start()
 
         
 
@@ -168,6 +178,8 @@ class Game(DirectObject):
            return
      if char.AP<1:
         return
+     
+     char.model.play('dodge')
 
      char.AP -=1
      char.X_Pos, char.Y_Pos = self.marker_x, self.marker_y
@@ -276,11 +288,28 @@ class Game(DirectObject):
     self.world.attachRigidBody(np.node())
 
     self.lvl()
-
+        ######## player setup
+    playermodel = Actor(
+            'player/player.bam',
+            {
+                'walk': 'player/player_walking.bam',
+                'idle': 'player/player_idle.bam',
+                'jump': 'player/player_JUMP.bam',
+                'fall': 'player/player_FALL.bam',
+                'land': 'player/player_land.bam',
+                'dodge': 'player/player_evade.bam',
+                'strike1': 'player/player_strike1.bam',
+                'strike2': 'player/player_strike2.bam',
+                'strike3': 'player/player_strike3.bam',
+                'prayer1': 'player/player_pray1.bam',
+                'prayer2': 'player/player_pray2.bam',
+                'takehit': 'player/player_takehit.bam'
+            },
+        )
 
     self.player = Character(self.worldNP,
                             self.world,
-                            loader.loadModel('guy_static.glb'),
+                            playermodel,
                             self.level[0][0].getPos()
                             )
     self.moveMarker = loader.loadModel('move_marker.glb')
@@ -379,7 +408,7 @@ class Character():
     if (self.current_Pos - self.target_Pos).length() > 0.1:
         self.is_Moving = True
         #lerp between points
-        move = LerpPosInterval(self.NP, 0.1, self.target_Pos)
+        move = LerpPosInterval(self.NP, 0.2, self.target_Pos)
         move.start()
 
         originalHpr = self.NP.getHpr()
@@ -393,9 +422,17 @@ class Character():
         look.start()
     else:
         self.is_Moving = False
-        
+    # self.anims()
+
+
+  def anims(self):
+     currentAnim = 'idle'
+
+     if self.model.getCurrentAnim!=(currentAnim):
+        self.model.loop(currentAnim)
+
   def APreset(self, t):
-     print('ap timer:',self.AP_timer)
+    #  print('ap timer:',self.AP_timer)
      if self.AP <2:
         self.AP_timer+=t
         if self.AP_timer>=1:
