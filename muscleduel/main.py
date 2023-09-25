@@ -337,19 +337,20 @@ class Character():
     w = 0.4
     shape = BulletCapsuleShape(w, h - 2 * w, ZUp)
 
-    self.controller = BulletCharacterControllerNode(shape, 0.4, 'Player')
+    # self.controller = BulletCharacterControllerNode(shape, 0.4, 'Player')
     
     # self.player.setMass(20.0)
     # self.player.setMaxSlope(45.0)
     # self.player.setGravity(9.81)
-    self.NP = self.worldNP.attachNewNode(self.controller)
+    self.NP = self.worldNP.attachNewNode('playerNode')
 
     model.reparentTo(self.NP)
-    model.setZ(-1)
-    self.NP.setPos(-2, 0, 10)
+
+    # model.setZ(-1)
+    # self.NP.setPos(-2, 0, 10)
     # self.player.NP.setH(-90)
-    self.NP.setCollideMask(BitMask32.allOn())
-    self.world.attachCharacter(self.controller)
+    # self.NP.setCollideMask(BitMask32.allOn())
+    # self.world.attachCharacter(self.controller)
 
     self.NP.setPos(self.startPoint)
 
@@ -361,8 +362,8 @@ class Character():
     print('player currentPos:,', self.current_Pos, 'target:', self.target_Pos)
      #moving
     if (self.current_Pos.x != self.target_Pos.x) and (self.current_Pos.yx != self.target_Pos.y):
-        if self.is_Moving == True:
-           return
+        # if self.is_Moving == True:
+        #    return
         self.is_Moving = True
         mo = LerpPosInterval(self.NP,
                               .2,
