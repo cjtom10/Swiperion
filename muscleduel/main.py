@@ -223,8 +223,20 @@ class Game(DirectObject):
     self.camNode.setPos(self.player.NP.getPos(render))
     # self.camNode.setH(self.player.NP.getH(render))
 
-    self.ap.setText(f'AP:{self.player.AP}')
+    # self.ap.setText(f'AP:{self.player.AP}')
     self.player.update_Character(dt)
+
+####display character AP
+    if self.player.AP < 1:  
+       self.plane.setAlphaScale(self.player.AP_timer)
+       self.plane2.setAlphaScale(.01)
+      #  self.AP2_Value = .01
+    elif self.player.AP < 2 and self.player.AP >= 1:
+       self.plane.setAlphaScale(1)
+       self.plane2.setAlphaScale(self.player.AP_timer)
+    elif self.player.AP >= 2:
+       self.plane.setAlphaScale(1)
+       self.plane2.setAlphaScale(1)
 
     return task.cont
 
@@ -233,7 +245,8 @@ class Game(DirectObject):
     self.worldNP.removeNode()
 
   def lvl(self, count = 100):
-    block = loader.loadModel('block.glb')
+    # block = loader.loadModel('block.glb')
+    block = loader.loadModel('post.glb')
     block.reparentTo(self.worldNP)
 
     size = 20
@@ -265,6 +278,10 @@ class Game(DirectObject):
     # print(self.level)
 
   def setup(self):
+
+
+
+
     self.worldNP = render.attachNewNode('World')
 
     # World
@@ -308,7 +325,7 @@ class Game(DirectObject):
             'player/player.bam',
             {
                 'walk': 'player/player_walking.bam',
-                'idle': 'player/player_idle.bam',
+                'idle': 'player/player_idle1.bam',
                 'jump': 'player/player_JUMP.bam',
                 'fall': 'player/player_FALL.bam',
                 'land': 'player/player_land.bam',
@@ -338,11 +355,22 @@ class Game(DirectObject):
     #                      self.level[0][0].getPos())
     # self.player.characterSetup(loader.loadModel('guy_static.glb'),
     #                      0, 0)
-
+    #hud
     #display AP
-    self.ap = OnscreenText(text = f'AP:{self.player.AP}')
-    self.ap.setPos(-1,-.8)
-  
+    # self.ap = OnscreenText(text = f'AP:{self.player.AP}')
+    # self.ap.setPos(-1,-.8)
+    self.plane = loader.loadModel('plane.glb')
+    self.plane.reparentTo(base.cam)
+    self.plane.setTransparency(True)
+    self.plane.setDepthWrite(False)
+    self.plane.setPos(-1,4,-.9)
+
+    self.plane2 = loader.loadModel('plane.glb')
+    self.plane2.reparentTo(base.cam)
+    self.plane2.setTransparency(True)
+    self.plane2.setDepthWrite(False)
+    self.plane2.setPos(-0.8,4,-.9)
+
   # def characterSetup(self, model, startpoint):
   #   # Character
   #   h = 1.75
@@ -469,13 +497,26 @@ class Character():
 
   def APreset(self, t):
     #  print('ap timer:',self.AP_timer)
-     if self.AP <2:
-        self.AP_timer+=t
-        if self.AP_timer>=1:
-           self.AP+=1
-           self.AP_timer=0
+    if self.AP <2:
+       self.AP_timer+=t
+       if self.AP_timer>=1:
+          self.AP+=1
+          self.AP_timer=0
 
-        
+    # if self.AP < 1:  
+    #    self.plane.setAlphaScale(self.AP_timer)
+    #    self.plane2.setAlphaScale(.01)
+    #   #  self.AP2_Value = .01
+    # elif self.AP < 2 and self.AP >= 1:
+    #    self.plane.setAlphaScale(1)
+    #    self.plane2.setAlphaScale(self.AP_timer)
+    # elif self.AP >= 2:
+    #    self.plane.setAlphaScale(1)
+    #    self.plane2.setAlphaScale(1)
+
+       
+  
+       
 
 game = Game()
 run()
