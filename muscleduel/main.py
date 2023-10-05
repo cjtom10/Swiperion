@@ -74,6 +74,7 @@ class Game(DirectObject):
     # inputState.watchWithModifiers('right', 'd')
     # inputState.watchWithModifiers('turnLeft', 'q')
     # inputState.watchWithModifiers('turnRight', 'e')
+    self.marker_target_pos=None
     
 
     # Task
@@ -88,7 +89,7 @@ class Game(DirectObject):
     self.accept('d',self.spaceCheck, [self.player, 'right'])
     #for testing purposes - n
     self.accept('space',self.move, [self.player])
-    self.accept('mouse1',self.strike, [self.player])
+    # self.accept('mouse1',self.strike, [self.player])
 
     self.camNode = self.worldNP.attachNewNode('camnode')
     base.cam.reparentTo(self.camNode)
@@ -157,18 +158,20 @@ class Game(DirectObject):
             return
         if marker_y < max(0, char.Y_Pos - 1) or marker_y > min(len(self.level[0]), char.Y_Pos + 1):
             return
+        
+
         self.marker_x, self.marker_y = marker_x, marker_y
 
         self.moveMarker.reparentTo(render)
-        target_pos = self.level[self.marker_x][self.marker_y].getPos()
-        marker_move = LerpPosInterval(self.moveMarker, 0.1, target_pos)
+        self.marker_target_pos = self.level[self.marker_x][self.marker_y].getPos()
+        marker_move = LerpPosInterval(self.moveMarker, 0.1, self.marker_target_pos)
         originalHpr = char.NP.getHpr()
         marker_move.start()
 
         if marker_x == char.X_Pos and marker_y == char.Y_Pos:
             # don't reset look if on same spot as char
             return
-        char.NP.lookAt(LPoint3f(target_pos[0], target_pos[1], target_pos[2]))
+        char.NP.lookAt(LPoint3f(self.marker_target_pos[0], self.marker_target_pos[1], self.marker_target_pos[2]))
         look_pos = char.NP.getHpr()
         char.NP.setHpr(originalHpr)
         # char_look = LerpHprInterval(char.NP, 0.1, look_pos)
@@ -182,6 +185,14 @@ class Game(DirectObject):
            return
      if char.AP<1:
         return
+    #  if (self.moveMarker.getPos() - self.player.NP.getPos()).length()< 1:
+    #      return
+     if self.marker_target_pos ==  char.target_Pos:
+           return
+    #  print((self.moveMarker.getPos() - char.NP.getPos()).length())
+    #  print('curreng',char.current_Pos,'targ',char.target_Pos)
+    #  if char.current_Pos == char.target_Pos:
+    #     return
      
     #  char.model.play('dodge')
      char.state = 'dodge'
@@ -190,6 +201,8 @@ class Game(DirectObject):
      char.X_Pos, char.Y_Pos = self.marker_x, self.marker_y
      char.target_Pos = self.level[char.X_Pos][char.Y_Pos].getPos()
      self.moveMarker.reparentTo(self.storage)
+
+     char.move()
   
   def strike(self, char):
       if char.state in char.actionStates:
@@ -226,17 +239,19 @@ class Game(DirectObject):
     # self.ap.setText(f'AP:{self.player.AP}')
     self.player.update_Character(dt)
 
+    
+
 ####display character AP
     if self.player.AP < 1:  
-       self.plane.setAlphaScale(self.player.AP_timer)
-       self.plane2.setAlphaScale(.01)
+       self.AP1.setAlphaScale(self.player.AP_timer)
+       self.AP2.setAlphaScale(.01)
       #  self.AP2_Value = .01
     elif self.player.AP < 2 and self.player.AP >= 1:
-       self.plane.setAlphaScale(1)
-       self.plane2.setAlphaScale(self.player.AP_timer)
+       self.AP1.setAlphaScale(1)
+       self.AP2.setAlphaScale(self.player.AP_timer)
     elif self.player.AP >= 2:
-       self.plane.setAlphaScale(1)
-       self.plane2.setAlphaScale(1)
+       self.AP1.setAlphaScale(1)
+       self.AP2.setAlphaScale(1)
 
     return task.cont
 
@@ -276,124 +291,149 @@ class Game(DirectObject):
                   # print(tile.getPos())
 
     # print(self.level)
+######COLLISIONS HERE#########
 
+  def collisionSetup(self):
+     #sets up collision nodes for charactyers
+     #body, atttack, block, 
+
+    traverser = CollisionTraverser('collider')
+    base.cTrav = traverser
+
+    self.collHandEvent = CollisionHandlerEvent()
+    self.collHandEvent.addInPattern('%fn-into-%in')
+
+    #TODO - do this fore every character
+    # for charas in self.characters:
+
+    # traverser.addCollider(character.NP.body_Collision, self.collHandEvemt)
+    # traverser.addCollider(character.NP.attack_Collision, self.collHandEvemt)
+    # traverser.addCollider(character.NP.Pdodge_Collision, self.collHandEvemt)
+    # traverser.addCollider(character.NP.block_Collision, self.collHandEvemt)
+    traverser.addCollider(self.player.body_Collision, self.collHandEvent)
+    traverser.addCollider(self.player.attack_Collision, self.collHandEvent)
+    traverser.addCollider(self.player.Pdodge_Collision, self.collHandEvent)
+    traverser.addCollider(self.player.block_Collision, self.collHandEvent)
+  
+  # def attachHB(self, parent, node, shape, pos=(0, 0, 0), visible=True):
+  #     """player hitboxes for attacks/parries"""
+  
+  
+  #     HitB = CollisionCapsule(0, 0.5, 0, 0, 0, 0, 0.5)
+  #     node.reparentTo(parent)
+  #     node.node().addSolid(shape)
+  #     # node.setZ(-.2)
+  #     node.setPos(pos)
+  
+  #     self.attached = True
+  #     if visible == True:
+  #         node.show()
+  # def detachHB(self, node):
+  #     node.node().clearSolids()
+  #     self.attached = False
   def setup(self):
-
-
-
-
-    self.worldNP = render.attachNewNode('World')
-
-    # World
-    self.debugNP = self.worldNP.attachNewNode(BulletDebugNode('Debug'))
-    self.debugNP.show()
-
-    self.world = BulletWorld()
-    self.world.setGravity(Vec3(0, 0, -9.81))
-    self.world.setDebugNode(self.debugNP.node())
-
-    self.storage = NodePath('storage')
-
-    # Ground
-    shape = BulletPlaneShape(Vec3(0, 0, 1), 0)
-
-    #img = PNMImage(Filename('models/elevation2.png'))
-    #shape = BulletHeightfieldShape(img, 1.0, ZUp)
-
-    np = self.worldNP.attachNewNode(BulletRigidBodyNode('Ground'))
-    np.node().addShape(shape)
-    np.setPos(0, 0, 0)
-    np.setCollideMask(BitMask32.allOn())
-
-    self.world.attachRigidBody(np.node())
-
-    # Box
-    shape = BulletBoxShape(Vec3(1.0, 3.0, 0.3))
-
-    np = self.worldNP.attachNewNode(BulletRigidBodyNode('Box'))
-    np.node().setMass(50.0)
-    np.node().addShape(shape)
-    np.setPos(3, 0, 4)
-    np.setH(0)
-    np.setCollideMask(BitMask32.allOn())
-
-    self.world.attachRigidBody(np.node())
-
-    self.lvl()
-        ######## player setup
-    playermodel = Actor(
-            'player/player.bam',
-            {
-                'walk': 'player/player_walking.bam',
-                'idle': 'player/player_idle1.bam',
-                'jump': 'player/player_JUMP.bam',
-                'fall': 'player/player_FALL.bam',
-                'land': 'player/player_land.bam',
-                'dodge': 'player/player_evade2.bam',
-                'strike1': 'player/player_strike1.bam',
-                'strike2': 'player/player_strike2.bam',
-                'strike3': 'player/player_strike3.bam',
-                'prayer1': 'player/player_pray1.bam',
-                'prayer2': 'player/player_pray2.bam',
-                'takehit': 'player/player_takehit.bam'
-            },
-        )
-
-    self.player = Character(self.worldNP,
-                            self.world,
-                            playermodel,
-                            self.level[0][0].getPos()
-                            )
-    self.moveMarker = loader.loadModel('move_marker.glb')
-    self.moveMarker.setScale(.9)
-    self.moveMarker.reparentTo(self.storage)
-    self.moveMarker.setTransparency(True)
-    self.marker_x = 0
-    self.marker_y = 0
-    
-    # self.characterSetup(loader.loadModel('guy_static.glb'),
-    #                      self.level[0][0].getPos())
-    # self.player.characterSetup(loader.loadModel('guy_static.glb'),
-    #                      0, 0)
-    #hud
-    #display AP
-    # self.ap = OnscreenText(text = f'AP:{self.player.AP}')
-    # self.ap.setPos(-1,-.8)
-    self.plane = loader.loadModel('plane.glb')
-    self.plane.reparentTo(base.cam)
-    self.plane.setTransparency(True)
-    self.plane.setDepthWrite(False)
-    self.plane.setPos(-1,4,-.9)
-
-    self.plane2 = loader.loadModel('plane.glb')
-    self.plane2.reparentTo(base.cam)
-    self.plane2.setTransparency(True)
-    self.plane2.setDepthWrite(False)
-    self.plane2.setPos(-0.8,4,-.9)
-
-  # def characterSetup(self, model, startpoint):
-  #   # Character
-  #   h = 1.75
-  #   w = 0.4
-  #   shape = BulletCapsuleShape(w, h - 2 * w, ZUp)
-
-  #   self.player = BulletCharacterControllerNode(shape, 0.4, 'Player')
-    
-  #   # self.player.setMass(20.0)
-  #   # self.player.setMaxSlope(45.0)
-  #   # self.player.setGravity(9.81)
-  #   self.player.NP = self.worldNP.attachNewNode(self.player)
-
-  #   model.reparentTo(self.player.NP)
-  #   model.setZ(-1)
-  #   self.player.NP.setPos(-2, 0, 10)
-  #   # self.player.NP.setH(-90)
-  #   self.player.NP.setCollideMask(BitMask32.allOn())
-  #   self.world.attachCharacter(self.player)
-
-  #   self.player.NP.setPos(startpoint)
-
-
+  
+  
+  
+  
+      self.worldNP = render.attachNewNode('World')
+  
+      # World
+      self.debugNP = self.worldNP.attachNewNode(BulletDebugNode('Debug'))
+      self.debugNP.show()
+  
+      self.world = BulletWorld()
+      self.world.setGravity(Vec3(0, 0, -9.81))
+      self.world.setDebugNode(self.debugNP.node())
+  
+      self.storage = NodePath('storage')
+  
+      # Ground
+      shape = BulletPlaneShape(Vec3(0, 0, 1), 0)
+  
+      #img = PNMImage(Filename('models/elevation2.png'))
+      #shape = BulletHeightfieldShape(img, 1.0, ZUp)
+  
+      np = self.worldNP.attachNewNode(BulletRigidBodyNode('Ground'))
+      np.node().addShape(shape)
+      np.setPos(0, 0, 0)
+      np.setCollideMask(BitMask32.allOn())
+  
+      self.world.attachRigidBody(np.node())
+  
+      # Box
+      shape = BulletBoxShape(Vec3(1.0, 3.0, 0.3))
+  
+      np = self.worldNP.attachNewNode(BulletRigidBodyNode('Box'))
+      np.node().setMass(50.0)
+      np.node().addShape(shape)
+      np.setPos(3, 0, 4)
+      np.setH(0)
+      np.setCollideMask(BitMask32.allOn())
+  
+      self.world.attachRigidBody(np.node())
+  
+      self.lvl()
+          ######## player setup
+      playermodel = Actor(
+              'player/player.bam',
+              {
+                  'walk': 'player/player_walking.bam',
+                  'idle': 'player/player_idle1.bam',
+                  'jump': 'player/player_JUMP.bam',
+                  'fall': 'player/player_FALL.bam',
+                  'land': 'player/player_land.bam',
+                  'dodge': 'player/player_evade2.bam',
+                  'strike1': 'player/player_strike1.bam',
+                  'strike2': 'player/player_strike2.bam',
+                  'strike3': 'player/player_strike3.bam',
+                  'prayer1': 'player/player_pray1.bam',
+                  'prayer2': 'player/player_pray2.bam',
+                  'takehit': 'player/player_takehit.bam'
+              },
+          )
+  
+      self.player = Character(self.worldNP,
+                              self.world,
+                              playermodel,
+                              self.level[0][0].getPos()
+                              )
+      self.moveMarker = loader.loadModel('move_marker.glb')
+      self.moveMarker.setScale(.9)
+      self.moveMarker.reparentTo(self.storage)
+      self.moveMarker.setTransparency(True)
+      self.marker_x = 0
+      self.marker_y = 0
+      
+      # self.characterSetup(loader.loadModel('guy_static.glb'),
+      #                      self.level[0][0].getPos())
+      # self.player.characterSetup(loader.loadModel('guy_static.glb'),
+      #                      0, 0)
+      #hud
+      #display AP
+      # self.ap = OnscreenText(text = f'AP:{self.player.AP}')
+      # self.ap.setPos(-1,-.8)
+      self.hud = loader.loadModel('hud.glb')
+      self.hud.reparentTo(base.cam)
+  
+      self.AP1 = self.hud.find('ap1')
+      self.AP1.reparentTo(base.cam)
+      self.AP1.setTransparency(True)
+      self.AP1.setDepthWrite(False)
+      # self.AP1.setPos(-1,4,-.9)gy-1
+  
+      self.AP2 = self.hud.find('ap2')
+      self.AP2.reparentTo(base.cam)
+      self.AP2.setTransparency(True)
+      self.AP2.setDepthWrite(False)
+      # self.AP2.setPos(-0.8,4,-.9)
+  
+      #for character in characters:
+      self.collisionSetup()
+  
+  
+  
+  
 
 
 class Character():
@@ -417,9 +457,12 @@ class Character():
     self.target_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
     self.is_Moving = False
 
+    self.pdodgenode = self.worldNP.attachNewNode('pdodge')
+
     self.state = 'idle'
     self.actionStates = ['dodge', 'strike1']
     self.animSeq = None
+
 
   # def characterSetup(self, model, startpoint):
     # Character
@@ -435,28 +478,16 @@ class Character():
     self.NP = self.worldNP.attachNewNode('playerNode')
 
     model.reparentTo(self.NP)
-
-    # model.setZ(-1)
-    # self.NP.setPos(-2, 0, 10)
-    # self.player.NP.setH(-90)
-    # self.NP.setCollideMask(BitMask32.allOn())
-    # self.world.attachCharacter(self.controller)
+    self.CollSetup()
 
     self.NP.setPos(self.startPoint)
 
-  def update_Character(self, dt):
-     
-    # self.current_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
-    #  self.NP.setPos(self.current_Pos)
-    self.APreset(dt)
-
-    self.current_Pos = self.NP.getPos(render)
-     #moving
-    if (self.current_Pos - self.target_Pos).length() > 0.1:
+  def move(self):
         self.is_Moving = True
         #lerp between points
-        move = LerpPosInterval(self.NP, 0.2, self.target_Pos)
-        move.start()
+        move = LerpPosInterval(self.NP, 0.3, self.target_Pos)
+        # move.start()
+
 
         originalHpr = self.NP.getHpr()
         self.NP.lookAt(LPoint3f(self.target_Pos[0], self.target_Pos[1], self.target_Pos[2]))
@@ -466,27 +497,93 @@ class Character():
         targetH = look_pos.getX()
         adjustedH = currentH + ((targetH - currentH + 180) % 360 - 180)
         look = LerpHprInterval(self.NP, 0.1, (adjustedH, look_pos.getY(), look_pos.getZ()))
-        look.start()
-    #attacking
-    elif self.state == 'strike1':
-        print('attacl')
-        # PLACEHOLDE
-        frame = self.model.getCurrentFrame()
-        if frame != None:
-          if frame>16:
-            self.state = 'idle'
-    else:
-        self.is_Moving = False
-        self.state = 'idle'
+        # look.start()
 
+        self.pdodgenode.setPos(self.model.getPos(render))
+        attach = Func(self.attachHB,self.pdodgenode,
+                                    self.Pdodge_Collision,
+                                    CollisionCapsule(0, 0, 0, 0, 0, 5, .5))
+        dettach = Func(self.detachHB, self.Pdodge_Collision)
+        # self.Pdodge_Collision.show()
+
+        anim = self.model.actorInterval('dodge',
+                                        0,
+                                        17,
+        )
+
+        def end():
+           self.state = 'idle'
+        fin = Func(end)
+
+        self.animSeq = Sequence(attach,
+                                Parallel(anim,
+                                         move,
+                                         look),
+                                Parallel(dettach,fin))
+        self.animSeq.start()
+
+  def  update_Character(self, dt):
+     
+    # self.current_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
+    #  self.NP.setPos(self.current_Pos)
+    # print('current stat4e:', self.state)
+    
+    if self.state in self.actionStates:
+       return
+    self.APreset(dt)
     self.anims()
+    
 
+    self.current_Pos = self.NP.getPos(render)
+    
+     #moving
+    # if (self.current_Pos - self.target_Pos).length() < 0.01 and self.state=='dodge':
+    #    self.state = 'idle'
+    #     self.is_Moving = True
+    #     #lerp between points
+    #     move = LerpPosInterval(self.NP, 0.2, self.target_Pos)
+    #     move.start()
+
+    #     originalHpr = self.NP.getHpr()
+    #     self.NP.lookAt(LPoint3f(self.target_Pos[0], self.target_Pos[1], self.target_Pos[2]))
+    #     look_pos = self.NP.getHpr()
+    #     self.NP.setHpr(originalHpr)
+    #     currentH = self.NP.getH()
+    #     targetH = look_pos.getX()
+    #     adjustedH = currentH + ((targetH - currentH + 180) % 360 - 180)
+    #     look = LerpHprInterval(self.NP, 0.1, (adjustedH, look_pos.getY(), look_pos.getZ()))
+    #     look.start()
+    #attacking
+
+    # elif self.state == 'strike1':
+    #     print('attacl')
+    #     # PLACEHOLDE
+    #     frame = self.model.getCurrentFrame()
+    #     if frame != None:
+    #       if frame>16:
+    #         self.state = 'idle'
+    # else:
+    #     self.is_Moving = False
+    #     self.state = 'idle'
+
+    
+  def CollSetup(self):
+     
+      self.body_Collision = self.NP.attachNewNode(
+         CollisionNode('body'))
+      self.attack_Collision = self.NP.attachNewNode(
+         CollisionNode('attack'))
+      self.block_Collision = self.NP.attachNewNode(
+         CollisionNode('block'))
+      self.Pdodge_Collision = self.NP.attachNewNode(
+         CollisionNode('Pdodge'))
 
   def anims(self):
     currentAnim = self.model.getCurrentAnim()
     anim = self.state
 
-    print(currentAnim)
+
+    # print(currentAnim)
 
     # if self.animSeq != None:
          
@@ -502,17 +599,35 @@ class Character():
        if self.AP_timer>=1:
           self.AP+=1
           self.AP_timer=0
+  
+  def attachHB(self, parent, node, shape, pos=(0, 0, 0), visible=True):
+      """player hitboxes for attacks/parries"""
+  
+  
+      HitB = CollisionCapsule(0, 0.5, 0, 0, 0, 0, 0.5)
+      node.reparentTo(parent)
+      node.node().addSolid(shape)
+      # node.setZ(-.2)
+      node.setPos(pos)
+  
+      self.attached = True
+      if visible == True:
+          node.show()
+          
+  def detachHB(self, node):
+      node.node().clearSolids()
+      self.attached = False
 
     # if self.AP < 1:  
     #    self.plane.setAlphaScale(self.AP_timer)
-    #    self.plane2.setAlphaScale(.01)
+    #    self.AP2.setAlphaScale(.01)
     #   #  self.AP2_Value = .01
     # elif self.AP < 2 and self.AP >= 1:
     #    self.plane.setAlphaScale(1)
-    #    self.plane2.setAlphaScale(self.AP_timer)
+    #    self.AP2.setAlphaScale(self.AP_timer)
     # elif self.AP >= 2:
     #    self.plane.setAlphaScale(1)
-    #    self.plane2.setAlphaScale(1)
+    #    self.AP2.setAlphaScale(1)
 
        
   
