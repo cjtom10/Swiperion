@@ -45,7 +45,7 @@ class Game(DirectObject):
 
     # Light
     alight = AmbientLight('ambientLight')
-    alight.setColor(Vec4(0.5, 0.5, 0.5, 1))
+    alight.setColor(Vec4(0.05, 0.05, 0.05, 0))
     alightNP = render.attachNewNode(alight)
 
     dlight = DirectionalLight('directionalLight')
@@ -65,17 +65,7 @@ class Game(DirectObject):
     self.accept('f3', self.toggleDebug)
     self.accept('f5', self.doScreenshot)
 
-    #self.accept('space', self.doJump)
-    #self.accept('c', self.doCrouch)
-
-    # inputState.watchWithModifiers('forward', 'w')
-    # inputState.watchWithModifiers('left', 'a')
-    # inputState.watchWithModifiers('reverse', 's')
-    # inputState.watchWithModifiers('right', 'd')
-    # inputState.watchWithModifiers('turnLeft', 'q')
-    # inputState.watchWithModifiers('turnRight', 'e')
-    self.marker_target_pos=None
-    
+  
 
     # Task
     taskMgr.add(self.update, 'updateWorld')
@@ -83,15 +73,29 @@ class Game(DirectObject):
     # Physics
     self.setup()
 
-    self.accept('w',self.spaceCheck, [self.player, 'forward'])
-    self.accept('s',self.spaceCheck, [self.player, 'back'])
-    self.accept('a',self.spaceCheck, [self.player, 'left'])
-    self.accept('d',self.spaceCheck, [self.player, 'right'])
+    self.directions = { 	
+                        'w' : {0:'north', 1:'east', 2:'south', 3:'west'},
+                        'a' : {0:'west', 1:'north', 2:'east', 3:'south'},
+                        's' : {0:'south', 1:'west', 2:'north', 3:'east'},
+                        'd' : {0:'east', 1:'south', 2:'west', 3:'north'},
+                        }
+    self.current_Orientation = 0 #0-north, 1-east, 2-south, 3 - west     
+
+    self.accept('w',self.spaceCheck, [self.player, 'w'])
+    self.accept('s',self.spaceCheck, [self.player, 's'])
+    self.accept('a',self.spaceCheck, [self.player, 'a'])
+    self.accept('d',self.spaceCheck, [self.player, 'd'])
     #for testing purposes - n
     self.accept('space',self.move, [self.player])
-    # self.accept('mouse1',self.strike, [self.player])
+    self.accept('mouse1',self.strike, [self.player])
 
+    self.accept('e',self.rotateCam, ['right'])
+    self.accept('q',self.rotateCam, ['left'])
+
+######Cam setup
     self.camNode = self.worldNP.attachNewNode('camnode')
+    self.camH = self.camNode.getH()
+    self.camTargetH = self.camH               
     base.cam.reparentTo(self.camNode)
     base.cam.setPos(-4,-15,6)
     base.cam.setP(-10)
@@ -137,20 +141,21 @@ class Game(DirectObject):
   
   # ____TASK___
 
-  def spaceCheck(self,char, direction):
+  def spaceCheck(self,char, dir):
         
         # if char.is_Moving:
         if char.state in char.actionStates:
            return
-        
-        marker_x, marker_y = self.marker_x, self.marker_y
-        if direction == 'forward':
+        direction = self.directions[dir][self.current_Orientation]
+
+        marker_x, marker_y = char.marker_x, char.marker_y
+        if direction == 'north':
             marker_y += 1
-        elif direction == 'back':
+        elif direction == 'south':
             marker_y -= 1
-        elif direction == 'left':
+        elif direction == 'west':
             marker_x -= 1
-        elif direction == 'right':
+        elif direction == 'east':
             marker_x += 1
 
         # cancel if out of bounds
@@ -160,18 +165,19 @@ class Game(DirectObject):
             return
         
 
-        self.marker_x, self.marker_y = marker_x, marker_y
+        char.marker_x, char.marker_y = marker_x, marker_y
 
-        self.moveMarker.reparentTo(render)
-        self.marker_target_pos = self.level[self.marker_x][self.marker_y].getPos()
-        marker_move = LerpPosInterval(self.moveMarker, 0.1, self.marker_target_pos)
+        char.moveMarker.reparentTo(render)
+        char.marker_target_pos = self.level[char.marker_x][char.marker_y].getPos()
+        # char.marker_currentpos = 
+        marker_move = LerpPosInterval(char.moveMarker, 0.1, char.marker_target_pos)#, other=self.camNode)
         originalHpr = char.NP.getHpr()
         marker_move.start()
 
         if marker_x == char.X_Pos and marker_y == char.Y_Pos:
             # don't reset look if on same spot as char
             return
-        char.NP.lookAt(LPoint3f(self.marker_target_pos[0], self.marker_target_pos[1], self.marker_target_pos[2]))
+        char.NP.lookAt(LPoint3f(char.marker_target_pos[0], char.marker_target_pos[1], char.marker_target_pos[2]))
         look_pos = char.NP.getHpr()
         char.NP.setHpr(originalHpr)
         # char_look = LerpHprInterval(char.NP, 0.1, look_pos)
@@ -183,11 +189,11 @@ class Game(DirectObject):
     #  if char.is_Moving:
      if char.state in char.actionStates:
            return
-     if char.AP<1:
-        return
+    #  if char.AP<1:
+    #     return
     #  if (self.moveMarker.getPos() - self.player.NP.getPos()).length()< 1:
     #      return
-     if self.marker_target_pos ==  char.target_Pos:
+     if char.marker_target_pos ==  char.target_Pos:
            return
     #  print((self.moveMarker.getPos() - char.NP.getPos()).length())
     #  print('curreng',char.current_Pos,'targ',char.target_Pos)
@@ -195,24 +201,54 @@ class Game(DirectObject):
     #     return
      
     #  char.model.play('dodge')
-     char.state = 'dodge'
+
 
      char.AP -=1
-     char.X_Pos, char.Y_Pos = self.marker_x, self.marker_y
+     char.X_Pos, char.Y_Pos = char.marker_x, char.marker_y
      char.target_Pos = self.level[char.X_Pos][char.Y_Pos].getPos()
-     self.moveMarker.reparentTo(self.storage)
+     char.moveMarker.reparentTo(char.storage)
 
      char.move()
   
   def strike(self, char):
       if char.state in char.actionStates:
         return
-      if char.AP<2:
-        return
+      # if char.AP<2:
+      #   return
       
       char.AP-=2
-      char.state = 'strike1'
+      # char.state = 'strike1'
+
+      # char.moveMarker.reparentTo(char.storage)
+      # char.moveMarker.setPos(char.current_Pos)
+      # char.target_Pos = char.current_Pos()
+  
+      if char.marker_target_pos !=  char.current_Pos:
+        # char.marker_target_pos =  char.current_Pos
+        # char.moveMarker.reparentTo(char.storage)
+        # char.moveMarker.setPos(char.current_Pos)
+        char.strike()
+      else:
+         char.marker_target_pos =  char.current_Pos
+         char.moveMarker.reparentTo(char.storage)
+         char.moveMarker.setPos(char.current_Pos)
+         char.feint()
+  def rotateCam(self, direction):
+    #  ""cam  rotates and soe does coord system of movement""""""
     
+    # currentH = self.camNode.getH()
+    if direction == 'right':
+       self.camTargetH -= 90
+       self.current_Orientation +=1
+       self.current_Orientation %= 4
+    if direction == 'left': 
+       self.camTargetH += 90
+       self.current_Orientation -=1
+       self.current_Orientation %= 4
+    #   self.camtargetH = 
+    # print(self.current_Orientation)
+    
+
   def processInput(self, dt):
     speed = Vec3(0, 0, 0)
     omega = 0.0
@@ -233,12 +269,14 @@ class Game(DirectObject):
     # self.processInput(dt)
     self.world.doPhysics(dt, 4, 1./240.)
 
-    self.camNode.setPos(self.player.NP.getPos(render))
+
     # self.camNode.setH(self.player.NP.getH(render))
 
+    # if h == 0 or h == 270 or h == 90 or h == 180:
+    #   self.camNode.setH(self.player.NP.getH(render))
     # self.ap.setText(f'AP:{self.player.AP}')
     self.player.update_Character(dt)
-
+    self.camTask()
     
 
 ####display character AP
@@ -254,6 +292,30 @@ class Game(DirectObject):
        self.AP2.setAlphaScale(1)
 
     return task.cont
+  def camTask(self):
+    self.camNode.setPos(self.player.NP.getPos(render))
+    def limit_angle(angle):
+ 
+
+      angle %= 360
+      if angle < 0:
+        angle += 360
+      return angle
+    # playerh = limit_angle(self.player.targetH)
+    # prevh = limit_angle(self.player.currentH)
+    self.camH = self.camNode.getH()
+
+    if self.camH != self.camTargetH:
+      if self.camH > self.camTargetH:
+        self.camH -= 10
+      if self.camH < self.camTargetH:
+        self.camH += 10
+      # print(self.camH)
+      self.camNode.setH(self.camH)
+    print(limit_angle(self.camH))
+    # dh = abs(playerh-prevh)
+    # self.camNode.setH()
+    # print('camnode platyer h diff',playerh,prevh,dh)
 
   def cleanup(self):
     self.world = None
@@ -384,7 +446,8 @@ class Game(DirectObject):
                   'fall': 'player/player_FALL.bam',
                   'land': 'player/player_land.bam',
                   'dodge': 'player/player_evade2.bam',
-                  'strike1': 'player/player_strike1.bam',
+                  'strike1': 'player/player_strike1L.bam',
+                  'feint1': 'player/player_feint1L.bam',
                   'strike2': 'player/player_strike2.bam',
                   'strike3': 'player/player_strike3.bam',
                   'prayer1': 'player/player_pray1.bam',
@@ -396,14 +459,16 @@ class Game(DirectObject):
       self.player = Character(self.worldNP,
                               self.world,
                               playermodel,
-                              self.level[0][0].getPos()
+                              self.level[0][0].getPos(),
+                              loader.loadModel('move_marker.glb'),
+                              self.storage
                               )
-      self.moveMarker = loader.loadModel('move_marker.glb')
-      self.moveMarker.setScale(.9)
-      self.moveMarker.reparentTo(self.storage)
-      self.moveMarker.setTransparency(True)
-      self.marker_x = 0
-      self.marker_y = 0
+      # self.moveMarker = loader.loadModel('move_marker.glb')
+      # self.moveMarker.setScale(.9)
+      # self.moveMarker.reparentTo(self.storage)
+      # self.moveMarker.setTransparency(True)
+      # self.marker_x = 0
+      # self.marker_y = 0
       
       # self.characterSetup(loader.loadModel('guy_static.glb'),
       #                      self.level[0][0].getPos())
@@ -442,7 +507,9 @@ class Character():
       worldNP: NodePath,
       world: BulletWorld,
       model,
-      startpoint
+      startpoint,
+      moveMarker,
+      storage
       ):
     self.AP = 2
     self.AP_timer=0
@@ -451,18 +518,31 @@ class Character():
     self.model = model
     self.startPoint = startpoint
 
+    self.storage = storage
+
+    self.moveMarker = moveMarker
+    self.moveMarker.setScale(.9)
+    self.moveMarker.reparentTo(self.storage)
+    self.moveMarker.setTransparency(True)
+    self.marker_x = 0
+    self.marker_y = 0
+    self.marker_target_pos=None
+
     self.X_Pos = int(self.startPoint.x)
     self.Y_Pos = int(self.startPoint.y)
     self.current_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
     self.target_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
+    self.targetH = 0
+    self.currentH = 0
     self.is_Moving = False
 
     self.pdodgenode = self.worldNP.attachNewNode('pdodge')
 
     self.state = 'idle'
-    self.actionStates = ['dodge', 'strike1']
+    self.actionStates = ['dodge', 'strike1', 'feint']
     self.animSeq = None
 
+    
 
   # def characterSetup(self, model, startpoint):
     # Character
@@ -482,8 +562,11 @@ class Character():
 
     self.NP.setPos(self.startPoint)
 
+  def endAction(self):
+           self.state = 'idle'
+
   def move(self):
-        self.is_Moving = True
+        self.state = 'dodge'
         #lerp between points
         move = LerpPosInterval(self.NP, 0.3, self.target_Pos)
         # move.start()
@@ -491,11 +574,11 @@ class Character():
 
         originalHpr = self.NP.getHpr()
         self.NP.lookAt(LPoint3f(self.target_Pos[0], self.target_Pos[1], self.target_Pos[2]))
-        look_pos = self.NP.getHpr()
+        look_pos = self.NP.getHpr(render)
         self.NP.setHpr(originalHpr)
-        currentH = self.NP.getH()
-        targetH = look_pos.getX()
-        adjustedH = currentH + ((targetH - currentH + 180) % 360 - 180)
+        self.currentH = self.NP.getH()
+        self.targetH = look_pos.getX()
+        adjustedH = self.currentH + ((self.targetH - self.currentH + 180) % 360 - 180)
         look = LerpHprInterval(self.NP, 0.1, (adjustedH, look_pos.getY(), look_pos.getZ()))
         # look.start()
 
@@ -511,9 +594,8 @@ class Character():
                                         17,
         )
 
-        def end():
-           self.state = 'idle'
-        fin = Func(end)
+
+        fin = Func(self.endAction)
 
         self.animSeq = Sequence(attach,
                                 Parallel(anim,
@@ -521,6 +603,30 @@ class Character():
                                          look),
                                 Parallel(dettach,fin))
         self.animSeq.start()
+
+  def strike(self):
+     self.state = 'strike1'
+     anim = self.model.actorInterval('strike1',
+                                     0,
+                                     25)
+     
+     fin = Func(self.endAction)
+
+     self.animSeq = Sequence(anim,
+                             fin)
+     self.animSeq.start()
+
+  def feint(self):
+     self.state = 'feint'
+     anim = self.model.actorInterval('feint1',
+                                     0,
+                                     17)
+     
+     fin = Func(self.endAction)
+
+     self.animSeq = Sequence(anim,
+                             fin)
+     self.animSeq.start()
 
   def  update_Character(self, dt):
      
@@ -535,6 +641,8 @@ class Character():
     
 
     self.current_Pos = self.NP.getPos(render)
+
+    # print(self.marker_target_pos, self.current_Pos)
     
      #moving
     # if (self.current_Pos - self.target_Pos).length() < 0.01 and self.state=='dodge':
