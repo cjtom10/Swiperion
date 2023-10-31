@@ -37,7 +37,10 @@ class Game(DirectObject, GamepadInput):
   def __init__(self):
     base.setBackgroundColor(0.1, 0.1, 0.8, 1)
     base.setFrameRateMeter(True)
-    
+    skybox = loader.loadModel('inkskybox2.glb')
+    skybox.setPos(0,0,-500)
+    skybox.setScale(10)
+    skybox.reparentTo(render)
 
     # base.cam.setPos(0, -20, 4)
     # base.cam.lookAt(0, 0, 0)
@@ -162,12 +165,14 @@ class Game(DirectObject, GamepadInput):
         elif direction == 'east':
             marker_x += 1
 
-        print('x, y  pos',char.X_Pos, char.Y_Pos)
+        print('x, y  pos',char.X_Pos, char.Y_Pos,'markerpos',char.marker_x, char.marker_y)
         # cancel if out of bounds
         if marker_x < max(0, char.X_Pos - 1) or marker_x > min(len(self.level), char.X_Pos + 1):
-
+            print('out of ranger x')
+            
             return
         if marker_y < max(0, char.Y_Pos - 1) or marker_y > min(len(self.level[0]), char.Y_Pos + 1):
+            print('out of range y')
             
             return
         
@@ -333,8 +338,6 @@ class Game(DirectObject, GamepadInput):
     self.player2.update_Character(dt)
     self.player.camTask()
     self.player2.camTask()
-
-    
 
     # print('p1 spotq', self.player2.X_Pos,self.player2.Y_Pos)
 
@@ -742,7 +745,7 @@ class Character():
       startH
       ):
     
-    self.HP = 4
+    self.HP = 4#00
     self.AP = 2
     self.AP_timer=0
     self.world = world
@@ -757,12 +760,12 @@ class Character():
     self.moveMarker.setScale(.9)
     self.moveMarker.reparentTo(self.storage)
     self.moveMarker.setTransparency(True)
-    self.marker_x = startX
-    self.marker_y = startY
+    self.marker_x, self.X_Pos = startX, startX
+    self.marker_y, self.Y_Pos = startY, startY
     self.marker_target_pos=None
 
-    self.X_Pos = int(self.startPoint.x)
-    self.Y_Pos = int(self.startPoint.y)
+    # self.X_Pos = int(self.startPoint.x)
+    # self.Y_Pos = int(self.startPoint.y)
     self.current_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
     self.target_Pos = Point3(self.X_Pos, self.Y_Pos, 0)
     self.targetH = 0
